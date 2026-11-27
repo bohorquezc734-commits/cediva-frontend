@@ -2,6 +2,7 @@ import { useMemo, useState, type SyntheticEvent } from 'react';
 import { CheckCircle2, ClipboardCheck, Clock, Search, Truck, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api, extraerMensajeError } from '../services/api';
+import { PaginacionTabla } from '../components/PaginacionTabla';
 import type { OrdenFacturaMuelle } from '../types/cediva';
 
 interface TrazabilidadMuelleViewProps {
@@ -27,6 +28,8 @@ export function TrazabilidadMuelleView({
 }: TrazabilidadMuelleViewProps) {
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todas');
   const [busqueda, setBusqueda] = useState('');
+  const [paginaActual, setPaginaActual] = useState(1);
+  const [tamanoPagina, setTamanoPagina] = useState(10);
   const [facturaADespachar, setFacturaADespachar] = useState<OrdenFacturaMuelle | null>(null);
   const [despachando, setDespachando] = useState(false);
 
@@ -69,6 +72,29 @@ export function TrazabilidadMuelleView({
       return cumpleEstado && cumpleBusqueda;
     });
   }, [facturasAuditadas, filtroEstado, busqueda]);
+
+  const totalPaginas = Math.max(1, Math.ceil(facturasFiltradas.length / tamanoPagina));
+  const paginaSegura = Math.min(paginaActual, totalPaginas);
+
+  const facturasPaginadas = useMemo(() => {
+    const inicio = (paginaSegura - 1) * tamanoPagina;
+    return facturasFiltradas.slice(inicio, inicio + tamanoPagina);
+  }, [facturasFiltradas, paginaSegura, tamanoPagina]);
+
+  const handleCambioFiltroEstado = (nuevoFiltro: FiltroEstado) => {
+    setFiltroEstado(nuevoFiltro);
+    setPaginaActual(1);
+  };
+
+  const handleCambioBusqueda = (valor: string) => {
+    setBusqueda(valor);
+    setPaginaActual(1);
+  };
+
+  const handleCambioTamano = (nuevoTamano: number) => {
+    setTamanoPagina(nuevoTamano);
+    setPaginaActual(1);
+  };
 
   const abrirModalDespacho = (factura: OrdenFacturaMuelle) => {
     setFacturaADespachar(factura);
@@ -138,7 +164,6 @@ export function TrazabilidadMuelleView({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-      {/* Encabezado */}
       <div className="header-action">
         <div>
           <h1 style={{ margin: 0, fontSize: '24px', color: '#0f172a' }}>
@@ -150,7 +175,6 @@ export function TrazabilidadMuelleView({
         </div>
       </div>
 
-      {/* KPIs */}
       <div className="kpi-grid">
         <div
           className="kpi-card"
@@ -207,7 +231,6 @@ export function TrazabilidadMuelleView({
         </div>
       </div>
 
-      {/* Barra de filtros y búsqueda */}
       <div
         style={{
           display: 'flex',
@@ -237,7 +260,7 @@ export function TrazabilidadMuelleView({
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setFiltroEstado(tab.id)}
+                onClick={() => handleCambioFiltroEstado(tab.id)}
                 style={{
                   padding: '8px 14px',
                   borderRadius: '8px',
@@ -269,7 +292,7 @@ export function TrazabilidadMuelleView({
           <input
             type="text"
             value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
+            onChange={(e) => handleCambioBusqueda(e.target.value)}
             placeholder="Buscar factura, cliente, placa o conductor..."
             style={{
               width: '100%',
@@ -282,7 +305,6 @@ export function TrazabilidadMuelleView({
         </div>
       </div>
 
-      {/* Tabla principal de trazabilidad */}
       <div className="table-container">
         <div
           style={{
@@ -310,157 +332,166 @@ export function TrazabilidadMuelleView({
             No hay facturas en esta categoría todavía.
           </p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>FACTURA</th>
-                <th>CLIENTE / NIT</th>
-                <th>MUELLE</th>
-                <th>AUDITADO POR</th>
-                <th>DESPACHO Y TRANSPORTE</th>
-                <th>ESTADO</th>
-                <th>ACCIÓN</th>
-              </tr>
-            </thead>
-            <tbody>
-              {facturasFiltradas.map((fac) => {
-                const totalUnidades = fac.lineas.reduce(
-                  (acc, l) => acc + l.cantidadPedida,
-                  0
-                );
-                const estaDespachada = fac.estado === 'despachada';
+          <>
+            <table>
+              <thead>
+                <tr>
+                  <th>FACTURA</th>
+                  <th>CLIENTE / NIT</th>
+                  <th>MUELLE</th>
+                  <th>AUDITADO POR</th>
+                  <th>DESPACHO Y TRANSPORTE</th>
+                  <th>ESTADO</th>
+                  <th>ACCIÓN</th>
+                </tr>
+              </thead>
+              <tbody>
+                {facturasPaginadas.map((fac) => {
+                  const totalUnidades = fac.lineas.reduce(
+                    (acc, l) => acc + l.cantidadPedida,
+                    0
+                  );
+                  const estaDespachada = fac.estado === 'despachada';
 
-                return (
-                  <tr key={fac.id}>
-                    <td>
-                      <strong>{fac.numeroFactura}</strong>
-                      <div style={{ fontSize: '12px', color: '#64748b' }}>
-                        {totalUnidades} un.
-                      </div>
-                    </td>
-                    <td>
-                      <strong>{fac.clienteNombre}</strong>
-                      <div style={{ fontSize: '12px', color: '#64748b' }}>
-                        {fac.clienteNit}
-                      </div>
-                    </td>
-                    <td>{fac.muelle}</td>
-                    <td>
-                      <strong>{fac.auditadoPor ?? 'Auditor'}</strong>
-                      <div style={{ fontSize: '12px', color: '#64748b' }}>
-                        {fac.horaAuditoria ?? '--:--:--'}
-                      </div>
-                    </td>
-                    <td>
-                      {estaDespachada && fac.datosTransporte ? (
-                        <div>
-                          <strong>
-                            {fac.datosTransporte.transportadora} ·{' '}
-                            {fac.datosTransporte.placaVehiculo}
-                          </strong>
-                          <div style={{ fontSize: '12px', color: '#475569' }}>
-                            Cond.: {fac.datosTransporte.conductorNombre}
+                  return (
+                    <tr key={fac.id}>
+                      <td>
+                        <strong>{fac.numeroFactura}</strong>
+                        <div style={{ fontSize: '12px', color: '#64748b' }}>
+                          {totalUnidades} un.
+                        </div>
+                      </td>
+                      <td>
+                        <strong>{fac.clienteNombre}</strong>
+                        <div style={{ fontSize: '12px', color: '#64748b' }}>
+                          {fac.clienteNit}
+                        </div>
+                      </td>
+                      <td>{fac.muelle}</td>
+                      <td>
+                        <strong>{fac.auditadoPor ?? 'Auditor'}</strong>
+                        <div style={{ fontSize: '12px', color: '#64748b' }}>
+                          {fac.horaAuditoria ?? '--:--:--'}
+                        </div>
+                      </td>
+                      <td>
+                        {estaDespachada && fac.datosTransporte ? (
+                          <div>
+                            <strong>
+                              {fac.datosTransporte.transportadora} ·{' '}
+                              {fac.datosTransporte.placaVehiculo}
+                            </strong>
+                            <div style={{ fontSize: '12px', color: '#475569' }}>
+                              Cond.: {fac.datosTransporte.conductorNombre}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: '12px',
+                                color: '#0284c7',
+                                fontWeight: 600,
+                              }}
+                            >
+                              Despachó: {fac.despachadoPor ?? 'Usuario'} (
+                              {fac.horaDespacho ?? '--:--'})
+                            </div>
                           </div>
-                          <div
+                        ) : (
+                          <span
                             style={{
                               fontSize: '12px',
-                              color: '#0284c7',
+                              color: '#d97706',
                               fontWeight: 600,
                             }}
                           >
-                            Despachó: {fac.despachadoPor ?? 'Usuario'} (
-                            {fac.horaDespacho ?? '--:--'})
-                          </div>
-                        </div>
-                      ) : (
-                        <span
-                          style={{
-                            fontSize: '12px',
-                            color: '#d97706',
-                            fontWeight: 600,
-                          }}
-                        >
-                          Esperando asignación de vehículo
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      {estaDespachada ? (
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '4px 10px',
-                            borderRadius: '999px',
-                            background: '#dcfce7',
-                            color: '#15803d',
-                            fontSize: '12px',
-                            fontWeight: 700,
-                          }}
-                        >
-                          <CheckCircle2 size={13} /> DESPACHADA
-                        </span>
-                      ) : (
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '4px 10px',
-                            borderRadius: '999px',
-                            background: '#fef3c7',
-                            color: '#b45309',
-                            fontSize: '12px',
-                            fontWeight: 700,
-                          }}
-                        >
-                          <Clock size={13} /> AUDITADA
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      {estaDespachada ? (
-                        <span
-                          style={{
-                            color: '#16a34a',
-                            fontWeight: 600,
-                            fontSize: '13px',
-                          }}
-                        >
-                          Completado
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => abrirModalDespacho(fac)}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            padding: '7px 12px',
-                            borderRadius: '8px',
-                            border: 'none',
-                            background: '#0284c7',
-                            color: '#ffffff',
-                            fontWeight: 600,
-                            fontSize: '12px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <Truck size={14} /> Despachar
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                            Esperando asignación de vehículo
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        {estaDespachada ? (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '4px 10px',
+                              borderRadius: '999px',
+                              background: '#dcfce7',
+                              color: '#15803d',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                            }}
+                          >
+                            <CheckCircle2 size={13} /> DESPACHADA
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '4px 10px',
+                              borderRadius: '999px',
+                              background: '#fef3c7',
+                              color: '#b45309',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                            }}
+                          >
+                            <Clock size={13} /> AUDITADA
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        {estaDespachada ? (
+                          <span
+                            style={{
+                              color: '#16a34a',
+                              fontWeight: 600,
+                              fontSize: '13px',
+                            }}
+                          >
+                            Completado
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => abrirModalDespacho(fac)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '7px 12px',
+                              borderRadius: '8px',
+                              border: 'none',
+                              background: '#0284c7',
+                              color: '#ffffff',
+                              fontWeight: 600,
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <Truck size={14} /> Despachar
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            <PaginacionTabla
+              paginaActual={paginaSegura}
+              totalItems={facturasFiltradas.length}
+              tamanoPagina={tamanoPagina}
+              onCambiarPagina={setPaginaActual}
+              onCambiarTamano={handleCambioTamano}
+            />
+          </>
         )}
       </div>
 
-      {/* Modal de Despacho */}
       {facturaADespachar && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '460px' }}>

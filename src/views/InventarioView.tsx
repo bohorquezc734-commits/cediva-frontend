@@ -3,6 +3,7 @@ import { ArrowRightLeft, Plus, Search } from 'lucide-react';
 import { EstacionPistoleoInventario } from '../components/inventario/EstacionPistoleoInventario';
 import { ModalMovimientoInventario } from '../components/inventario/ModalMovimientoInventario';
 import { ModalNuevoProducto } from '../components/inventario/ModalNuevoProducto';
+import { PaginacionTabla } from '../components/PaginacionTabla';
 import type { Producto } from '../types/cediva';
 
 interface InventarioViewProps {
@@ -25,6 +26,8 @@ export function InventarioView({
   onRecargarDatos,
 }: InventarioViewProps) {
   const [busqueda, setBusqueda] = useState('');
+  const [paginaActual, setPaginaActual] = useState(1);
+  const [tamanoPagina, setTamanoPagina] = useState(10);
   const [modalNuevoAbierto, setModalNuevoAbierto] = useState(false);
   const [productoMovimiento, setProductoMovimiento] = useState<Producto | null>(null);
 
@@ -36,10 +39,28 @@ export function InventarioView({
     );
   }, [productos, busqueda]);
 
+  const totalPaginas = Math.max(1, Math.ceil(productosFiltrados.length / tamanoPagina));
+  const paginaSegura = Math.min(paginaActual, totalPaginas);
+
+  const productosPaginados = useMemo(() => {
+    const inicio = (paginaSegura - 1) * tamanoPagina;
+    return productosFiltrados.slice(inicio, inicio + tamanoPagina);
+  }, [productosFiltrados, paginaSegura, tamanoPagina]);
+
   const valorTotalInventario = useMemo(
     () => productos.reduce((acc, p) => acc + p.precioUnitario * p.stock, 0),
     [productos]
   );
+
+  const handleCambioBusqueda = (valor: string) => {
+    setBusqueda(valor);
+    setPaginaActual(1);
+  };
+
+  const handleCambioTamano = (nuevoTamano: number) => {
+    setTamanoPagina(nuevoTamano);
+    setPaginaActual(1);
+  };
 
   return (
     <>
@@ -80,75 +101,93 @@ export function InventarioView({
             placeholder="Filtrar inventario por nombre o código de barras..."
             className="search-input"
             value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
+            onChange={(e) => handleCambioBusqueda(e.target.value)}
           />
         </div>
 
         {cargando ? (
           <p style={{ padding: '20px' }}>Cargando datos de la bodega...</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Código</th>
-                <th>Producto</th>
-                <th>Precio</th>
-                <th>Stock</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {productosFiltrados.map((prod) => {
-                const badgeStyle = getStockBadgeStyle(prod.stock);
-                return (
-                  <tr key={prod.id}>
-                    <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{prod.codigoBarras}</td>
-                    <td style={{ fontWeight: 500 }}>{prod.nombre}</td>
-                    <td style={{ fontWeight: 600, color: 'var(--primary)' }}>
-                      ${prod.precioUnitario.toLocaleString('es-CO')}
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          whiteSpace: 'nowrap',
-                          padding: '4px 10px',
-                          borderRadius: '20px',
-                          fontSize: '13px',
-                          fontWeight: 'bold',
-                          ...badgeStyle,
-                        }}
-                      >
-                        {prod.stock.toLocaleString('es-CO')} un.
-                      </span>
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        onClick={() => setProductoMovimiento(prod)}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          whiteSpace: 'nowrap',
-                          gap: '5px',
-                          padding: '6px 12px',
-                          backgroundColor: '#eff6ff',
-                          color: 'var(--primary)',
-                          border: '1px solid #bfdbfe',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontSize: '13px',
-                          fontWeight: '500',
-                        }}
-                      >
-                        <ArrowRightLeft size={16} /> Movimiento
-                      </button>
+          <>
+            <table>
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Producto</th>
+                  <th>Precio</th>
+                  <th>Stock</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {productosPaginados.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: 'center', padding: '24px', color: '#64748b' }}>
+                      No hay productos que coincidan con el filtro.
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                ) : (
+                  productosPaginados.map((prod) => {
+                    const badgeStyle = getStockBadgeStyle(prod.stock);
+                    return (
+                      <tr key={prod.id}>
+                        <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{prod.codigoBarras}</td>
+                        <td style={{ fontWeight: 500 }}>{prod.nombre}</td>
+                        <td style={{ fontWeight: 600, color: 'var(--primary)' }}>
+                          ${prod.precioUnitario.toLocaleString('es-CO')}
+                        </td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              whiteSpace: 'nowrap',
+                              padding: '4px 10px',
+                              borderRadius: '20px',
+                              fontSize: '13px',
+                              fontWeight: 'bold',
+                              ...badgeStyle,
+                            }}
+                          >
+                            {prod.stock.toLocaleString('es-CO')} un.
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            onClick={() => setProductoMovimiento(prod)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              whiteSpace: 'nowrap',
+                              gap: '5px',
+                              padding: '6px 12px',
+                              backgroundColor: '#eff6ff',
+                              color: 'var(--primary)',
+                              border: '1px solid #bfdbfe',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontSize: '13px',
+                              fontWeight: '500',
+                            }}
+                          >
+                            <ArrowRightLeft size={16} /> Movimiento
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+
+            <PaginacionTabla
+              paginaActual={paginaSegura}
+              totalItems={productosFiltrados.length}
+              tamanoPagina={tamanoPagina}
+              onCambiarPagina={setPaginaActual}
+              onCambiarTamano={handleCambioTamano}
+            />
+          </>
         )}
       </div>
 

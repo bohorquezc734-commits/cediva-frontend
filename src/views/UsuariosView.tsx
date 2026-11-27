@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api, extraerMensajeError } from '../services/api';
+import { PaginacionTabla } from '../components/PaginacionTabla';
 import type { RolUsuario, UsuarioListadoDto } from '../types/cediva';
 
 interface UsuariosViewProps {
@@ -258,6 +259,8 @@ export function UsuariosView({ usuarioActualEmail }: UsuariosViewProps) {
   const [usuarios, setUsuarios] = useState<UsuarioListadoDto[]>([]);
   const [cargando, setCargando] = useState(false);
   const [busqueda, setBusqueda] = useState('');
+  const [paginaActual, setPaginaActual] = useState(1);
+  const [tamanoPagina, setTamanoPagina] = useState(10);
   const [modalAbierto, setModalAbierto] = useState(false);
 
   const cargarUsuarios = useCallback(async () => {
@@ -304,6 +307,24 @@ export function UsuariosView({ usuarioActualEmail }: UsuariosViewProps) {
       );
     });
   }, [usuarios, busqueda]);
+
+  const totalPaginas = Math.max(1, Math.ceil(usuariosFiltrados.length / tamanoPagina));
+  const paginaSegura = Math.min(paginaActual, totalPaginas);
+
+  const usuariosPaginados = useMemo(() => {
+    const inicio = (paginaSegura - 1) * tamanoPagina;
+    return usuariosFiltrados.slice(inicio, inicio + tamanoPagina);
+  }, [usuariosFiltrados, paginaSegura, tamanoPagina]);
+
+  const handleCambioBusqueda = (valor: string) => {
+    setBusqueda(valor);
+    setPaginaActual(1);
+  };
+
+  const handleCambioTamano = (nuevoTamano: number) => {
+    setTamanoPagina(nuevoTamano);
+    setPaginaActual(1);
+  };
 
   return (
     <>
@@ -353,7 +374,7 @@ export function UsuariosView({ usuarioActualEmail }: UsuariosViewProps) {
             type="text"
             className="search-input"
             value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
+            onChange={(e) => handleCambioBusqueda(e.target.value)}
             placeholder="Buscar por nombre, correo o rol..."
           />
         </div>
@@ -376,7 +397,7 @@ export function UsuariosView({ usuarioActualEmail }: UsuariosViewProps) {
               </tr>
             )}
 
-            {!cargando && usuariosFiltrados.length === 0 && (
+            {!cargando && usuariosPaginados.length === 0 && (
               <tr>
                 <td colSpan={4} style={{ textAlign: 'center', color: '#64748b', padding: '24px' }}>
                   No se encontraron usuarios con ese criterio.
@@ -384,7 +405,7 @@ export function UsuariosView({ usuarioActualEmail }: UsuariosViewProps) {
               </tr>
             )}
 
-            {usuariosFiltrados.map((u) => {
+            {usuariosPaginados.map((u) => {
               const rolNorm = normalizarRol(u.rol);
               const badge = obtenerEstiloRol(rolNorm);
               const esSesionActual =
@@ -448,6 +469,14 @@ export function UsuariosView({ usuarioActualEmail }: UsuariosViewProps) {
             })}
           </tbody>
         </table>
+
+        <PaginacionTabla
+          paginaActual={paginaSegura}
+          totalItems={usuariosFiltrados.length}
+          tamanoPagina={tamanoPagina}
+          onCambiarPagina={setPaginaActual}
+          onCambiarTamano={handleCambioTamano}
+        />
       </div>
 
       <ModalRegistrarUsuario

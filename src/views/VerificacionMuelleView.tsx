@@ -364,7 +364,9 @@ export function VerificacionMuelleView({
         <ModalEscanerCamara
           abierto={camaraAbierta}
           onCerrar={() => setCamaraAbierta(false)}
-          onCodigoDetectado={muelle.procesarPistoleo}
+          onPistolearCodigo={(codigo) => {
+            void muelle.procesarPistoleo(codigo);
+          }}
         />
       )}
     </>
