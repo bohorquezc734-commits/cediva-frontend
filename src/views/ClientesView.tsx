@@ -1,7 +1,8 @@
 import { useState, useMemo, type SubmitEvent } from 'react';
-import axios from 'axios';
 import { Plus, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { api, extraerMensajeError } from '../services/api';
+import { PaginacionTabla } from '../components/PaginacionTabla';
 import type { ClienteDto, CrearClientePayload } from '../types/cediva';
 
 interface ClientesViewProps {
@@ -10,10 +11,10 @@ interface ClientesViewProps {
   readonly onRecargarDatos: () => Promise<void>;
 }
 
-const API_URL = 'https://localhost:5001/api';
-
 export function ClientesView({ clientes, cargando, onRecargarDatos }: ClientesViewProps) {
   const [busqueda, setBusqueda] = useState('');
+  const [paginaActual, setPaginaActual] = useState(1);
+  const [tamanoPagina, setTamanoPagina] = useState(10);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [nombre, setNombre] = useState('');
   const [nit, setNit] = useState('');
@@ -29,6 +30,24 @@ export function ClientesView({ clientes, cargando, onRecargarDatos }: ClientesVi
     );
   }, [clientes, busqueda]);
 
+  const totalPaginas = Math.max(1, Math.ceil(clientesFiltrados.length / tamanoPagina));
+  const paginaSegura = Math.min(paginaActual, totalPaginas);
+
+  const clientesPaginados = useMemo(() => {
+    const inicio = (paginaSegura - 1) * tamanoPagina;
+    return clientesFiltrados.slice(inicio, inicio + tamanoPagina);
+  }, [clientesFiltrados, paginaSegura, tamanoPagina]);
+
+  const handleCambioBusqueda = (valor: string) => {
+    setBusqueda(valor);
+    setPaginaActual(1);
+  };
+
+  const handleCambioTamano = (nuevoTamano: number) => {
+    setTamanoPagina(nuevoTamano);
+    setPaginaActual(1);
+  };
+
   const guardarCliente = (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
 
@@ -37,7 +56,7 @@ export function ClientesView({ clientes, cargando, onRecargarDatos }: ClientesVi
       nit: nit.trim(),
     };
 
-    const req = axios.post(`${API_URL}/ClienteControlador`, nuevoCliente).then((res) => {
+    const req = api.post('/ClienteControlador', nuevoCliente).then((res) => {
       setIsModalOpen(false);
       setNombre('');
       setNit('');
@@ -48,7 +67,7 @@ export function ClientesView({ clientes, cargando, onRecargarDatos }: ClientesVi
     void toast.promise(req, {
       loading: 'Guardando cliente...',
       success: '¡Cliente registrado exitosamente!',
-      error: (err) => err.response?.data?.detail || 'Error al registrar el cliente. Revisa los datos.',
+      error: (err) => extraerMensajeError(err, 'Error al registrar el cliente. Revisa los datos.'),
     });
   };
 
@@ -81,37 +100,47 @@ export function ClientesView({ clientes, cargando, onRecargarDatos }: ClientesVi
             placeholder="Buscar por nombre o NIT..."
             className="search-input"
             value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
+            onChange={(e) => handleCambioBusqueda(e.target.value)}
           />
         </div>
 
         {cargando ? (
           <p style={{ padding: '20px' }}>Cargando clientes...</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>NIT</th>
-                <th>Nombre / Razón Social</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clientesFiltrados.map((cliente) => (
-                <tr key={cliente.id}>
-                  <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{cliente.nit}</td>
-                  <td style={{ fontWeight: 500 }}>{cliente.nombre}</td>
-                </tr>
-              ))}
-
-              {clientesFiltrados.length === 0 && (
+          <>
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan={2} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                    No se encontraron clientes con ese criterio.
-                  </td>
+                  <th>NIT</th>
+                  <th>Nombre / Razón Social</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {clientesPaginados.map((cliente) => (
+                  <tr key={cliente.id}>
+                    <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{cliente.nit}</td>
+                    <td style={{ fontWeight: 500 }}>{cliente.nombre}</td>
+                  </tr>
+                ))}
+
+                {clientesPaginados.length === 0 && (
+                  <tr>
+                    <td colSpan={2} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                      No se encontraron clientes con ese criterio.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+
+            <PaginacionTabla
+              paginaActual={paginaSegura}
+              totalItems={clientesFiltrados.length}
+              tamanoPagina={tamanoPagina}
+              onCambiarPagina={setPaginaActual}
+              onCambiarTamano={handleCambioTamano}
+            />
+          </>
         )}
       </div>
 

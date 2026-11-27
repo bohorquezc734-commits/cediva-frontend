@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Search } from 'lucide-react';
+import { PaginacionTabla } from '../components/PaginacionTabla';
 import type { DespachoHistorialDto, Producto } from '../types/cediva';
 
 interface HistorialViewProps {
@@ -10,6 +11,8 @@ interface HistorialViewProps {
 export function HistorialView({ despachosHistorial, productos }: HistorialViewProps) {
   const [filtroClienteHistorial, setFiltroClienteHistorial] = useState('');
   const [filtroFechaHistorial, setFiltroFechaHistorial] = useState('');
+  const [paginaActual, setPaginaActual] = useState(1);
+  const [tamanoPagina, setTamanoPagina] = useState(10);
 
   const historialFiltrado = useMemo(() => {
     return despachosHistorial.filter((despacho) => {
@@ -21,6 +24,35 @@ export function HistorialView({ despachosHistorial, productos }: HistorialViewPr
       return coincideCliente && coincideFecha;
     });
   }, [despachosHistorial, filtroClienteHistorial, filtroFechaHistorial]);
+
+  const totalPaginas = Math.max(1, Math.ceil(historialFiltrado.length / tamanoPagina));
+  const paginaSegura = Math.min(paginaActual, totalPaginas);
+
+  const historialPaginado = useMemo(() => {
+    const inicio = (paginaSegura - 1) * tamanoPagina;
+    return historialFiltrado.slice(inicio, inicio + tamanoPagina);
+  }, [historialFiltrado, paginaSegura, tamanoPagina]);
+
+  const handleCambioCliente = (valor: string) => {
+    setFiltroClienteHistorial(valor);
+    setPaginaActual(1);
+  };
+
+  const handleCambioFecha = (valor: string) => {
+    setFiltroFechaHistorial(valor);
+    setPaginaActual(1);
+  };
+
+  const handleLimpiarFiltros = () => {
+    setFiltroClienteHistorial('');
+    setFiltroFechaHistorial('');
+    setPaginaActual(1);
+  };
+
+  const handleCambioTamano = (nuevoTamano: number) => {
+    setTamanoPagina(nuevoTamano);
+    setPaginaActual(1);
+  };
 
   return (
     <>
@@ -41,6 +73,7 @@ export function HistorialView({ despachosHistorial, productos }: HistorialViewPr
             display: 'flex',
             gap: '15px',
             alignItems: 'center',
+            flexWrap: 'wrap',
             backgroundColor: '#f8fafc',
           }}
         >
@@ -50,6 +83,7 @@ export function HistorialView({ despachosHistorial, productos }: HistorialViewPr
               alignItems: 'center',
               gap: '8px',
               flex: 1,
+              minWidth: '220px',
               backgroundColor: 'white',
               border: '1px solid #ccc',
               borderRadius: '6px',
@@ -61,7 +95,7 @@ export function HistorialView({ despachosHistorial, productos }: HistorialViewPr
               type="text"
               placeholder="Buscar por cliente..."
               value={filtroClienteHistorial}
-              onChange={(e) => setFiltroClienteHistorial(e.target.value)}
+              onChange={(e) => handleCambioCliente(e.target.value)}
               style={{
                 width: '100%',
                 padding: '10px 0',
@@ -86,7 +120,7 @@ export function HistorialView({ despachosHistorial, productos }: HistorialViewPr
             <input
               type="date"
               value={filtroFechaHistorial}
-              onChange={(e) => setFiltroFechaHistorial(e.target.value)}
+              onChange={(e) => handleCambioFecha(e.target.value)}
               style={{
                 padding: '10px 0',
                 border: 'none',
@@ -100,10 +134,7 @@ export function HistorialView({ despachosHistorial, productos }: HistorialViewPr
           {(filtroClienteHistorial || filtroFechaHistorial) && (
             <button
               type="button"
-              onClick={() => {
-                setFiltroClienteHistorial('');
-                setFiltroFechaHistorial('');
-              }}
+              onClick={handleLimpiarFiltros}
               style={{
                 padding: '10px',
                 backgroundColor: '#fee2e2',
@@ -129,7 +160,7 @@ export function HistorialView({ despachosHistorial, productos }: HistorialViewPr
             </tr>
           </thead>
           <tbody>
-            {historialFiltrado.map((despacho) => (
+            {historialPaginado.map((despacho) => (
               <tr key={despacho.id}>
                 <td>{new Date(despacho.fecha).toLocaleString('es-CO')}</td>
                 <td style={{ fontWeight: 500 }}>{despacho.cliente}</td>
@@ -149,7 +180,7 @@ export function HistorialView({ despachosHistorial, productos }: HistorialViewPr
               </tr>
             ))}
 
-            {historialFiltrado.length === 0 && (
+            {historialPaginado.length === 0 && (
               <tr>
                 <td colSpan={4} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
                   No se encontraron despachos con esos filtros.
@@ -158,6 +189,14 @@ export function HistorialView({ despachosHistorial, productos }: HistorialViewPr
             )}
           </tbody>
         </table>
+
+        <PaginacionTabla
+          paginaActual={paginaSegura}
+          totalItems={historialFiltrado.length}
+          tamanoPagina={tamanoPagina}
+          onCambiarPagina={setPaginaActual}
+          onCambiarTamano={handleCambioTamano}
+        />
       </div>
     </>
   );
