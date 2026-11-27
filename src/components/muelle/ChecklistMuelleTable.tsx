@@ -1,4 +1,5 @@
 import { CheckCircle2, ClipboardList, Lock, PackageCheck } from 'lucide-react';
+import { ESTADOS_MUELLE } from '../../constants/muelle';
 import type { OrdenFacturaMuelle, Producto } from '../../types/cediva';
 
 interface ChecklistMuelleTableProps {
@@ -16,7 +17,7 @@ export function ChecklistMuelleTable({
   cerrandoPacking,
   onConfirmarPacking,
 }: ChecklistMuelleTableProps) {
-  const estaCerrada = facturaActiva.estado !== 'pendiente';
+  const estaCerrada = facturaActiva.estado !== ESTADOS_MUELLE.ALISTADA;
   const puedeCerrar = !estaCerrada && todasCompletas && !cerrandoPacking;
 
   const obtenerTextoBoton = () => {

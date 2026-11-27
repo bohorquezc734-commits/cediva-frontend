@@ -1,6 +1,7 @@
 import { useState, type SubmitEvent } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { LIMITES_OPERACION } from '../../constants/operacion';
 import type { NuevaFacturaInput } from '../../hooks/useVerificacionMuelle';
 import type { Producto } from '../../types/cediva';
 
@@ -30,14 +31,19 @@ export function ModalNuevaFacturaMuelle({
 
   const codigoInicial = productos[0]?.codigoBarras ?? '55667788';
   const [productoCodigoTemp, setProductoCodigoTemp] = useState(codigoInicial);
-  const [cantidadTemp, setCantidadTemp] = useState(1);
+  const [cantidadTemp, setCantidadTemp] = useState<number>(
+    LIMITES_OPERACION.CANTIDAD_MINIMA
+  );
   const [lineasBorrador, setLineasBorrador] = useState<BorradorLinea[]>([]);
 
   if (!abierta) return null;
 
   const handleAgregarLinea = () => {
     const codigo = productoCodigoTemp.trim();
-    const cant = Math.max(1, Math.floor(cantidadTemp));
+    const cant = Math.max(
+      LIMITES_OPERACION.CANTIDAD_MINIMA,
+      Math.floor(cantidadTemp)
+    );
 
     if (!codigo) {
       toast.error('Selecciona o ingresa un código de barras.');
@@ -56,7 +62,7 @@ export function ModalNuevaFacturaMuelle({
       return [...prev, { codigoBarras: codigo, cantidadPedida: cant }];
     });
 
-    setCantidadTemp(1);
+    setCantidadTemp(LIMITES_OPERACION.CANTIDAD_MINIMA);
   };
 
   const handleEliminarLinea = (codigoBarras: string) => {

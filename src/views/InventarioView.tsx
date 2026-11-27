@@ -4,17 +4,25 @@ import { EstacionPistoleoInventario } from '../components/inventario/EstacionPis
 import { ModalMovimientoInventario } from '../components/inventario/ModalMovimientoInventario';
 import { ModalNuevoProducto } from '../components/inventario/ModalNuevoProducto';
 import { PaginacionTabla } from '../components/PaginacionTabla';
-import type { Producto } from '../types/cediva';
+import { ROLES_USUARIO } from '../constants/roles';
+import {
+  CONFIGURACION_PAGINACION,
+  UMBRALES_INVENTARIO,
+} from '../constants/operacion';
+import type { Producto, RolUsuario } from '../types/cediva';
 
 interface InventarioViewProps {
   readonly productos: readonly Producto[];
   readonly cargando: boolean;
   readonly puedeCrearProducto: boolean;
+  readonly usuarioRol: RolUsuario;
   readonly onRecargarDatos: () => Promise<void>;
 }
 
 function getStockBadgeStyle(stock: number): { backgroundColor: string; color: string } {
-  if (stock > 10) return { backgroundColor: '#dcfce7', color: '#16a34a' };
+  if (stock > UMBRALES_INVENTARIO.STOCK_ALTO) {
+    return { backgroundColor: '#dcfce7', color: '#16a34a' };
+  }
   if (stock > 0) return { backgroundColor: '#fef08a', color: '#854d0e' };
   return { backgroundColor: '#fee2e2', color: '#dc2626' };
 }
@@ -23,11 +31,16 @@ export function InventarioView({
   productos,
   cargando,
   puedeCrearProducto,
+  usuarioRol,
   onRecargarDatos,
 }: InventarioViewProps) {
   const [busqueda, setBusqueda] = useState('');
-  const [paginaActual, setPaginaActual] = useState(1);
-  const [tamanoPagina, setTamanoPagina] = useState(10);
+  const [paginaActual, setPaginaActual] = useState<number>(
+    CONFIGURACION_PAGINACION.PAGINA_INICIAL
+  );
+  const [tamanoPagina, setTamanoPagina] = useState<number>(
+    CONFIGURACION_PAGINACION.TAMANO_PAGINA
+  );
   const [modalNuevoAbierto, setModalNuevoAbierto] = useState(false);
   const [productoMovimiento, setProductoMovimiento] = useState<Producto | null>(null);
 
@@ -39,7 +52,10 @@ export function InventarioView({
     );
   }, [productos, busqueda]);
 
-  const totalPaginas = Math.max(1, Math.ceil(productosFiltrados.length / tamanoPagina));
+  const totalPaginas = Math.max(
+    CONFIGURACION_PAGINACION.MINIMO_TOTAL_PAGINAS,
+    Math.ceil(productosFiltrados.length / tamanoPagina)
+  );
   const paginaSegura = Math.min(paginaActual, totalPaginas);
 
   const productosPaginados = useMemo(() => {
@@ -54,12 +70,12 @@ export function InventarioView({
 
   const handleCambioBusqueda = (valor: string) => {
     setBusqueda(valor);
-    setPaginaActual(1);
+    setPaginaActual(CONFIGURACION_PAGINACION.PAGINA_INICIAL);
   };
 
   const handleCambioTamano = (nuevoTamano: number) => {
     setTamanoPagina(nuevoTamano);
-    setPaginaActual(1);
+    setPaginaActual(CONFIGURACION_PAGINACION.PAGINA_INICIAL);
   };
 
   return (
@@ -87,10 +103,12 @@ export function InventarioView({
           <div className="kpi-title">Total Productos</div>
           <div className="kpi-value">{productos.length}</div>
         </div>
-        <div className="kpi-card">
-          <div className="kpi-title">Valor del Inventario</div>
-          <div className="kpi-value">${valorTotalInventario.toLocaleString('es-CO')}</div>
-        </div>
+        {usuarioRol === ROLES_USUARIO.ADMINISTRADOR && (
+          <div className="kpi-card">
+            <div className="kpi-title">Valor del Inventario</div>
+            <div className="kpi-value">${valorTotalInventario.toLocaleString('es-CO')}</div>
+          </div>
+        )}
       </div>
 
       <div className="table-container">

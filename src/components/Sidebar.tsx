@@ -9,7 +9,9 @@ import {
   ClipboardCheck,
   UserCog
 } from 'lucide-react';
-import type { UsuarioInfoDto, VistaActual } from '../types/cediva';
+import { ROLES_USUARIO } from '../constants/roles';
+import { VISTAS_APP } from '../constants/navegacion';
+import { etiquetaRolUsuario, type UsuarioInfoDto, type VistaActual } from '../types/cediva';
 
 interface SidebarProps {
   readonly vistaActual: VistaActual;
@@ -25,10 +27,10 @@ export function Sidebar({
   onCerrarSesion,
 }: SidebarProps) {
   const puedeVerGestionComercial =
-    usuario.rol === 'Administrador' || usuario.rol === 'Supervisor';
-
-
-    const esAdministrador = usuario.rol === 'Administrador';
+    usuario.rol === ROLES_USUARIO.ADMINISTRADOR ||
+    usuario.rol === ROLES_USUARIO.SUPERVISOR;
+  const esAdministrador = usuario.rol === ROLES_USUARIO.ADMINISTRADOR;
+  const esAuxiliarLogistico = usuario.rol === ROLES_USUARIO.AUXILIAR_LOGISTICO;
 
   return (
     <aside className="sidebar">
@@ -44,7 +46,7 @@ export function Sidebar({
         <div className="sidebar-user">
           <div className="sidebar-user-info">
             <div className="sidebar-user-name">{usuario.nombreCompleto}</div>
-            <div className="sidebar-user-role">{usuario.rol}</div>
+            <div className="sidebar-user-role">{etiquetaRolUsuario(usuario.rol)}</div>
           </div>
 
           <button
@@ -62,47 +64,51 @@ export function Sidebar({
       <nav className="sidebar-nav" aria-label="Navegación principal">
         <button
           type="button"
-          className={`nav-item ${vistaActual === 'muelle' ? 'active' : ''}`}
-          onClick={() => onCambiarVista('muelle')}
+          className={`nav-item ${vistaActual === VISTAS_APP.MUELLE ? 'active' : ''}`}
+          onClick={() => onCambiarVista(VISTAS_APP.MUELLE)}
         >
           <ScanBarcode size={18} />
-          <span>Verificación Muelle</span>
+          <span>{esAuxiliarLogistico ? 'Alistamiento' : 'Verificación Muelle'}</span>
         </button>
         {esAdministrador && (
           <button
             type="button"
-            className={`nav-item ${vistaActual === 'usuarios' ? 'active' : ''}`}
-            onClick={() => onCambiarVista('usuarios')}
+            className={`nav-item ${vistaActual === VISTAS_APP.USUARIOS ? 'active' : ''}`}
+            onClick={() => onCambiarVista(VISTAS_APP.USUARIOS)}
           >
             <UserCog size={18} />
             <span>Usuarios</span>
           </button>
         )}
 
-        <button
-          type="button"
-          className={`nav-item ${vistaActual === 'trazabilidad' ? 'active' : ''}`}
-          onClick={() => onCambiarVista('trazabilidad')}
-        >
-          <ClipboardCheck size={18} />
-          <span>Trazabilidad Muelle</span>
-        </button>
+        {!esAuxiliarLogistico && (
+          <button
+            type="button"
+            className={`nav-item ${vistaActual === VISTAS_APP.TRAZABILIDAD ? 'active' : ''}`}
+            onClick={() => onCambiarVista(VISTAS_APP.TRAZABILIDAD)}
+          >
+            <ClipboardCheck size={18} />
+            <span>Trazabilidad Muelle</span>
+          </button>
+        )}
 
-        <button
-          type="button"
-          className={`nav-item ${vistaActual === 'inventario' ? 'active' : ''}`}
-          onClick={() => onCambiarVista('inventario')}
-        >
-          <LayoutDashboard size={18} />
-          <span>Inventario</span>
-        </button>
+        {!esAuxiliarLogistico && (
+          <button
+            type="button"
+            className={`nav-item ${vistaActual === VISTAS_APP.INVENTARIO ? 'active' : ''}`}
+            onClick={() => onCambiarVista(VISTAS_APP.INVENTARIO)}
+          >
+            <LayoutDashboard size={18} />
+            <span>Inventario</span>
+          </button>
+        )}
 
         {puedeVerGestionComercial && (
           <>
             <button
               type="button"
-              className={`nav-item ${vistaActual === 'clientes' ? 'active' : ''}`}
-              onClick={() => onCambiarVista('clientes')}
+              className={`nav-item ${vistaActual === VISTAS_APP.CLIENTES ? 'active' : ''}`}
+              onClick={() => onCambiarVista(VISTAS_APP.CLIENTES)}
             >
               <Users size={18} />
               <span>Clientes</span>
@@ -110,8 +116,8 @@ export function Sidebar({
 
             <button
               type="button"
-              className={`nav-item ${vistaActual === 'despachos' ? 'active' : ''}`}
-              onClick={() => onCambiarVista('despachos')}
+              className={`nav-item ${vistaActual === VISTAS_APP.DESPACHOS ? 'active' : ''}`}
+              onClick={() => onCambiarVista(VISTAS_APP.DESPACHOS)}
             >
               <Truck size={18} />
               <span>Despachos</span>
@@ -119,8 +125,8 @@ export function Sidebar({
 
             <button
               type="button"
-              className={`nav-item ${vistaActual === 'historial' ? 'active' : ''}`}
-              onClick={() => onCambiarVista('historial')}
+              className={`nav-item ${vistaActual === VISTAS_APP.HISTORIAL ? 'active' : ''}`}
+              onClick={() => onCambiarVista(VISTAS_APP.HISTORIAL)}
             >
               <History size={18} />
               <span>Historial Despachos</span>

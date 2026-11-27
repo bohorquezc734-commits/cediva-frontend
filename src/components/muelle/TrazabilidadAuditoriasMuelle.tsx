@@ -1,4 +1,5 @@
 import { ClipboardCheck, Truck } from 'lucide-react';
+import { ESTADOS_MUELLE, MENSAJES_MUELLE } from '../../constants/muelle';
 import type { OrdenFacturaMuelle } from '../../types/cediva';
 
 interface TrazabilidadAuditoriasMuelleProps {
@@ -45,7 +46,7 @@ export function TrazabilidadAuditoriasMuelle({
         <tbody>
           {facturasAuditadas.map((fac) => {
             const totalUnidades = fac.lineas.reduce((acc, l) => acc + l.cantidadPedida, 0);
-            const despachada = fac.estado === 'despachada';
+            const despachada = fac.estado === ESTADOS_MUELLE.DESPACHADA;
 
             return (
               <tr key={fac.id}>
@@ -62,9 +63,11 @@ export function TrazabilidadAuditoriasMuelle({
                 <td>{fac.muelle}</td>
                 <td style={{ fontSize: '12px' }}>
                   <div style={{ fontWeight: 600, color: '#0f172a' }}>
-                    {fac.auditadoPor ?? 'Auditor Bodega'}
+                    {fac.auditadoPor ?? MENSAJES_MUELLE.AUDITOR_BODEGA_PREDETERMINADO}
                   </div>
-                  <div style={{ color: '#64748b' }}>{fac.horaAuditoria ?? '--:--:--'}</div>
+                  <div style={{ color: '#64748b' }}>
+                    {fac.horaAuditoria ?? MENSAJES_MUELLE.HORA_NO_DISPONIBLE}
+                  </div>
                 </td>
                 <td style={{ fontSize: '12px' }}>
                   {despachada && fac.datosTransporte ? (
@@ -79,7 +82,7 @@ export function TrazabilidadAuditoriasMuelle({
                         Cond.: {fac.datosTransporte.conductorNombre}
                       </div>
                       <div style={{ color: '#0284c7', fontWeight: 600, marginTop: '2px' }}>
-                        Despachó: {fac.despachadoPor ?? 'Auditor Bodega'} ({fac.horaDespacho})
+                        Despachó: {fac.despachadoPor ?? MENSAJES_MUELLE.AUDITOR_BODEGA_PREDETERMINADO} ({fac.horaDespacho})
                       </div>
                     </>
                   ) : (

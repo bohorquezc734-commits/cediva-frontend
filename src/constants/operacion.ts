@@ -1,0 +1,28 @@
+export const INTERVALOS_OPERACION_MS = {
+  SINCRONIZACION_MUELLE: 5000,
+  ANTI_RAFAGA_PISTOLEO: 180,
+  TIEMPO_INICIAL_PISTOLEO: 0,
+  DURACION_ALERTA_TROCADO: 4000,
+} as const;
+
+export const CONFIGURACION_PAGINACION = {
+  PAGINA_INICIAL: 1,
+  TAMANO_PAGINA: 10,
+  MINIMO_TOTAL_PAGINAS: 1,
+} as const;
+
+export const UMBRALES_INVENTARIO = {
+  STOCK_ALTO: 10,
+} as const;
+
+export const LIMITES_OPERACION = {
+  CANTIDAD_MINIMA: 1,
+} as const;
+
+export const TIPOS_MOVIMIENTO_INVENTARIO = {
+  ENTRADA: 1,
+  SALIDA: 2,
+} as const;
+
+export type TipoMovimientoInventario =
+  typeof TIPOS_MOVIMIENTO_INVENTARIO[keyof typeof TIPOS_MOVIMIENTO_INVENTARIO];

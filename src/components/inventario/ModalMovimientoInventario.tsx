@@ -2,6 +2,11 @@ import { useState, type SubmitEvent } from 'react';
 import { ArrowDownToLine, ArrowUpFromLine, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api, extraerMensajeError } from '../../services/api';
+import {
+  LIMITES_OPERACION,
+  TIPOS_MOVIMIENTO_INVENTARIO,
+  type TipoMovimientoInventario,
+} from '../../constants/operacion';
 import type { Producto } from '../../types/cediva';
 
 interface ModalMovimientoInventarioProps {
@@ -15,8 +20,12 @@ export function ModalMovimientoInventario({
   onCerrar,
   onRegistrado,
 }: ModalMovimientoInventarioProps) {
-  const [tipoMovimiento, setTipoMovimiento] = useState(1);
-  const [cantidad, setCantidad] = useState(1);
+  const [tipoMovimiento, setTipoMovimiento] = useState<TipoMovimientoInventario>(
+    TIPOS_MOVIMIENTO_INVENTARIO.ENTRADA
+  );
+  const [cantidad, setCantidad] = useState<number>(
+    LIMITES_OPERACION.CANTIDAD_MINIMA
+  );
 
   if (!producto) return null;
 
@@ -30,7 +39,7 @@ export function ModalMovimientoInventario({
         tipo: tipoMovimiento,
       })
       .then((res) => {
-        setCantidad(1);
+        setCantidad(LIMITES_OPERACION.CANTIDAD_MINIMA);
         onCerrar();
         void onRegistrado();
         return res;
@@ -38,7 +47,7 @@ export function ModalMovimientoInventario({
 
     void toast.promise(req, {
       loading: 'Procesando movimiento...',
-      success: `¡${tipoMovimiento === 1 ? 'Entrada' : 'Salida'} registrada con éxito!`,
+      success: `¡${tipoMovimiento === TIPOS_MOVIMIENTO_INVENTARIO.ENTRADA ? 'Entrada' : 'Salida'} registrada con éxito!`,
       error: (err) => extraerMensajeError(err, 'Error al procesar el movimiento'),
     });
   };
@@ -69,7 +78,7 @@ export function ModalMovimientoInventario({
             <div style={{ display: 'flex', gap: '10px', marginTop: '5px' }}>
               <button
                 type="button"
-                onClick={() => setTipoMovimiento(1)}
+                onClick={() => setTipoMovimiento(TIPOS_MOVIMIENTO_INVENTARIO.ENTRADA)}
                 style={{
                   flex: 1,
                   padding: '10px',
@@ -78,9 +87,9 @@ export function ModalMovimientoInventario({
                   alignItems: 'center',
                   gap: '8px',
                   borderRadius: '6px',
-                  border: tipoMovimiento === 1 ? '2px solid #16a34a' : '1px solid #ccc',
-                  backgroundColor: tipoMovimiento === 1 ? '#dcfce7' : 'white',
-                  color: tipoMovimiento === 1 ? '#16a34a' : '#64748b',
+                  border: tipoMovimiento === TIPOS_MOVIMIENTO_INVENTARIO.ENTRADA ? '2px solid #16a34a' : '1px solid #ccc',
+                  backgroundColor: tipoMovimiento === TIPOS_MOVIMIENTO_INVENTARIO.ENTRADA ? '#dcfce7' : 'white',
+                  color: tipoMovimiento === TIPOS_MOVIMIENTO_INVENTARIO.ENTRADA ? '#16a34a' : '#64748b',
                   fontWeight: 'bold',
                   cursor: 'pointer',
                 }}
@@ -89,7 +98,7 @@ export function ModalMovimientoInventario({
               </button>
               <button
                 type="button"
-                onClick={() => setTipoMovimiento(2)}
+                onClick={() => setTipoMovimiento(TIPOS_MOVIMIENTO_INVENTARIO.SALIDA)}
                 style={{
                   flex: 1,
                   padding: '10px',
@@ -98,9 +107,9 @@ export function ModalMovimientoInventario({
                   alignItems: 'center',
                   gap: '8px',
                   borderRadius: '6px',
-                  border: tipoMovimiento === 2 ? '2px solid #dc2626' : '1px solid #ccc',
-                  backgroundColor: tipoMovimiento === 2 ? '#fee2e2' : 'white',
-                  color: tipoMovimiento === 2 ? '#dc2626' : '#64748b',
+                  border: tipoMovimiento === TIPOS_MOVIMIENTO_INVENTARIO.SALIDA ? '2px solid #dc2626' : '1px solid #ccc',
+                  backgroundColor: tipoMovimiento === TIPOS_MOVIMIENTO_INVENTARIO.SALIDA ? '#fee2e2' : 'white',
+                  color: tipoMovimiento === TIPOS_MOVIMIENTO_INVENTARIO.SALIDA ? '#dc2626' : '#64748b',
                   fontWeight: 'bold',
                   cursor: 'pointer',
                 }}
@@ -118,7 +127,7 @@ export function ModalMovimientoInventario({
               value={cantidad}
               onChange={(e) => setCantidad(Number(e.target.value))}
               required
-              min="1"
+              min={LIMITES_OPERACION.CANTIDAD_MINIMA}
             />
           </div>
 
@@ -139,9 +148,14 @@ export function ModalMovimientoInventario({
             <button
               type="submit"
               className="btn-primary"
-              style={{ backgroundColor: tipoMovimiento === 1 ? '#16a34a' : '#dc2626' }}
+              style={{
+                backgroundColor:
+                  tipoMovimiento === TIPOS_MOVIMIENTO_INVENTARIO.ENTRADA
+                    ? '#16a34a'
+                    : '#dc2626',
+              }}
             >
-              Confirmar {tipoMovimiento === 1 ? 'Entrada' : 'Salida'}
+              Confirmar {tipoMovimiento === TIPOS_MOVIMIENTO_INVENTARIO.ENTRADA ? 'Entrada' : 'Salida'}
             </button>
           </div>
         </form>

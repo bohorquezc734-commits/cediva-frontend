@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Search } from 'lucide-react';
+import { CONFIGURACION_PAGINACION } from '../constants/operacion';
 import { PaginacionTabla } from '../components/PaginacionTabla';
 import type { DespachoHistorialDto, Producto } from '../types/cediva';
 
@@ -8,24 +9,39 @@ interface HistorialViewProps {
   readonly productos: readonly Producto[];
 }
 
+function formatearFechaHoraDespacho(fecha: string | null | undefined): string {
+  if (!fecha) return 'Fecha no disponible';
+
+  const fechaHora = new Date(fecha);
+  if (Number.isNaN(fechaHora.getTime())) return 'Fecha no disponible';
+  return fechaHora.toLocaleString('es-CO');
+}
+
 export function HistorialView({ despachosHistorial, productos }: HistorialViewProps) {
   const [filtroClienteHistorial, setFiltroClienteHistorial] = useState('');
   const [filtroFechaHistorial, setFiltroFechaHistorial] = useState('');
-  const [paginaActual, setPaginaActual] = useState(1);
-  const [tamanoPagina, setTamanoPagina] = useState(10);
+  const [paginaActual, setPaginaActual] = useState<number>(
+    CONFIGURACION_PAGINACION.PAGINA_INICIAL
+  );
+  const [tamanoPagina, setTamanoPagina] = useState<number>(
+    CONFIGURACION_PAGINACION.TAMANO_PAGINA
+  );
 
   const historialFiltrado = useMemo(() => {
     return despachosHistorial.filter((despacho) => {
       const coincideCliente = despacho.cliente
         .toLowerCase()
         .includes(filtroClienteHistorial.toLowerCase());
-      const fechaDespacho = despacho.fecha.split('T')[0];
+      const fechaDespacho = despacho.fecha?.split('T')[0] ?? '';
       const coincideFecha = filtroFechaHistorial ? fechaDespacho === filtroFechaHistorial : true;
       return coincideCliente && coincideFecha;
     });
   }, [despachosHistorial, filtroClienteHistorial, filtroFechaHistorial]);
 
-  const totalPaginas = Math.max(1, Math.ceil(historialFiltrado.length / tamanoPagina));
+  const totalPaginas = Math.max(
+    CONFIGURACION_PAGINACION.MINIMO_TOTAL_PAGINAS,
+    Math.ceil(historialFiltrado.length / tamanoPagina)
+  );
   const paginaSegura = Math.min(paginaActual, totalPaginas);
 
   const historialPaginado = useMemo(() => {
@@ -35,23 +51,23 @@ export function HistorialView({ despachosHistorial, productos }: HistorialViewPr
 
   const handleCambioCliente = (valor: string) => {
     setFiltroClienteHistorial(valor);
-    setPaginaActual(1);
+    setPaginaActual(CONFIGURACION_PAGINACION.PAGINA_INICIAL);
   };
 
   const handleCambioFecha = (valor: string) => {
     setFiltroFechaHistorial(valor);
-    setPaginaActual(1);
+    setPaginaActual(CONFIGURACION_PAGINACION.PAGINA_INICIAL);
   };
 
   const handleLimpiarFiltros = () => {
     setFiltroClienteHistorial('');
     setFiltroFechaHistorial('');
-    setPaginaActual(1);
+    setPaginaActual(CONFIGURACION_PAGINACION.PAGINA_INICIAL);
   };
 
   const handleCambioTamano = (nuevoTamano: number) => {
     setTamanoPagina(nuevoTamano);
-    setPaginaActual(1);
+    setPaginaActual(CONFIGURACION_PAGINACION.PAGINA_INICIAL);
   };
 
   return (
@@ -162,7 +178,7 @@ export function HistorialView({ despachosHistorial, productos }: HistorialViewPr
           <tbody>
             {historialPaginado.map((despacho) => (
               <tr key={despacho.id}>
-                <td>{new Date(despacho.fecha).toLocaleString('es-CO')}</td>
+                <td>{formatearFechaHoraDespacho(despacho.fecha)}</td>
                 <td style={{ fontWeight: 500 }}>{despacho.cliente}</td>
                 <td>
                   <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px' }}>
