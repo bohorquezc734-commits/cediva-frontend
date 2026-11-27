@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Camera, CheckCircle2, ClipboardCheck, Plus, RotateCcw } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, Plus, RotateCcw } from 'lucide-react';
+import { ESTADOS_MUELLE, SECCIONES_MUELLE, type SeccionMuelle } from '../constants/muelle';
+import { ROLES_USUARIO } from '../constants/roles';
 import { useVerificacionMuelle } from '../hooks/useVerificacionMuelle';
+import { useAlistamiento } from '../hooks/useAlistamiento';
 import { SelectorFacturaMuelle } from '../components/muelle/SelectorFacturaMuelle';
 import { EscanerRfMuelle } from '../components/muelle/EscanerRfMuelle';
 import { ChecklistMuelleTable } from '../components/muelle/ChecklistMuelleTable';
 import { BitacoraIncidenciasMuelle } from '../components/muelle/BitacoraIncidenciasMuelle';
+import { BotonCamaraMuelle } from '../components/muelle/BotonCamaraMuelle';
 import { ModalNuevaFacturaMuelle } from '../components/muelle/ModalNuevaFacturaMuelle';
 import { ModalEscanerCamara } from '../components/muelle/ModalEscanerCamara';
+import { PanelAlistamientoMuelle } from '../components/muelle/PanelAlistamientoMuelle';
 import type { OrdenFacturaMuelle, Producto, RolUsuario } from '../types/cediva';
 
 interface VerificacionMuelleViewProps {
@@ -17,6 +22,7 @@ interface VerificacionMuelleViewProps {
   ) => void;
   readonly auditorNombre?: string;
   readonly onRecargarDatos: () => Promise<void>;
+  readonly onSincronizarOrdenesMuelle: () => Promise<void>;
   readonly onFacturaAuditada?: (facturaAuditada: OrdenFacturaMuelle) => Promise<void> | void;
   readonly onIrATrazabilidad?: () => void;
   readonly usuarioRol: RolUsuario;
@@ -106,30 +112,10 @@ function ControlesCamaraRf({
 }: ControlesCamaraRfProps) {
   return (
     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-      <button
-        type="button"
-        disabled={deshabilitado}
-        onClick={onAbrirCamara}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '0 18px',
-          height: '100%',
-          minHeight: '48px',
-          borderRadius: '12px',
-          border: 'none',
-          background: deshabilitado ? '#94a3b8' : '#0f172a',
-          color: '#ffffff',
-          fontWeight: 600,
-          fontSize: '13px',
-          cursor: deshabilitado ? 'not-allowed' : 'pointer',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        <Camera size={18} />
-        <span>Escanear RF</span>
-      </button>
+      <BotonCamaraMuelle
+        deshabilitado={deshabilitado}
+        onAbrir={onAbrirCamara}
+      />
 
       <label
         style={{
@@ -170,13 +156,28 @@ export function VerificacionMuelleView({
   onCambiarFacturas,
   auditorNombre,
   onRecargarDatos,
+  onSincronizarOrdenesMuelle,
   onFacturaAuditada,
   onIrATrazabilidad,
   usuarioRol,
 }: VerificacionMuelleViewProps) {
   const [modalAbierto, setModalAbierto] = useState(false);
   const [camaraAbierta, setCamaraAbierta] = useState(false);
+  const [camaraAlistamientoAbierta, setCamaraAlistamientoAbierta] = useState(false);
   const [autoCamara, setAutoCamara] = useState(false);
+  const [seccionActiva, setSeccionActiva] = useState<SeccionMuelle>(() =>
+    usuarioRol === ROLES_USUARIO.AUDITOR_BODEGA
+      ? SECCIONES_MUELLE.VERIFICACION
+      : SECCIONES_MUELLE.ALISTAMIENTO
+  );
+
+  const alistamiento = useAlistamiento({
+    productos,
+    facturas,
+    onCambiarFacturas,
+    operadorNombre: auditorNombre ?? 'Operario',
+    onSincronizarOrdenesMuelle,
+  });
 
   const muelle = useVerificacionMuelle({
     productos,
@@ -188,15 +189,18 @@ export function VerificacionMuelleView({
   });
 
   const facturaPendienteActiva =
-    muelle.facturaActiva?.estado === 'pendiente'
+    muelle.facturaActiva?.estado === ESTADOS_MUELLE.ALISTADA
       ? muelle.facturaActiva
       : muelle.facturasPendientes[0];
 
   const estaBloqueada = !facturaPendienteActiva;
   const puedeGestionarFacturas =
-    usuarioRol === 'Administrador' || usuarioRol === 'Supervisor';
+    usuarioRol === ROLES_USUARIO.ADMINISTRADOR ||
+    usuarioRol === ROLES_USUARIO.SUPERVISOR;
   const puedeUsarCamaraRf =
-    usuarioRol === 'AuditorBodega' || usuarioRol === 'Supervisor';
+    usuarioRol === ROLES_USUARIO.AUDITOR_BODEGA ||
+    usuarioRol === ROLES_USUARIO.SUPERVISOR;
+  const puedeVerificarMuelle = usuarioRol !== ROLES_USUARIO.AUXILIAR_LOGISTICO;
   const colorFaltantes =
     muelle.resumenFactura.faltantes === 0 ? '#16a34a' : '#d97706';
 
@@ -227,10 +231,10 @@ export function VerificacionMuelleView({
       <div className="header-action">
         <div>
           <h1 style={{ margin: 0, fontSize: '24px', color: '#1e293b' }}>
-            Control de Muelle — Picking & Packing
+            Alistamiento y Verificación de Muelle
           </h1>
           <p style={{ margin: '5px 0 0', color: '#64748b', fontSize: '14px' }}>
-            Verificación RF contra factura para evitar trocados, faltantes o sobrantes antes del despacho
+            Alista las ordenes en bodega y verifica en muelle antes del despacho
           </p>
         </div>
 
@@ -273,6 +277,49 @@ export function VerificacionMuelleView({
         </div>
       </div>
 
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className={seccionActiva === SECCIONES_MUELLE.ALISTAMIENTO ? 'btn-primary' : ''}
+          onClick={() => {
+            setCamaraAbierta(false);
+            setSeccionActiva(SECCIONES_MUELLE.ALISTAMIENTO);
+          }}
+        >
+          Por alistar ({alistamiento.pendientes.length})
+        </button>
+        {puedeVerificarMuelle && (
+          <button
+            type="button"
+            className={seccionActiva === SECCIONES_MUELLE.VERIFICACION ? 'btn-primary' : ''}
+            onClick={() => {
+              setCamaraAlistamientoAbierta(false);
+              setSeccionActiva(SECCIONES_MUELLE.VERIFICACION);
+            }}
+          >
+            Verificación muelle ({muelle.facturasPendientes.length})
+          </button>
+        )}
+      </div>
+
+      {seccionActiva === SECCIONES_MUELLE.ALISTAMIENTO ? (
+        <PanelAlistamientoMuelle
+          pendientes={alistamiento.pendientes}
+          activa={alistamiento.activa}
+          facturaId={alistamiento.facturaId}
+          onSeleccionarFactura={alistamiento.setFacturaId}
+          resumen={alistamiento.resumen}
+          inputRef={alistamiento.inputRef}
+          codigo={alistamiento.codigo}
+          onCambiarCodigo={alistamiento.setCodigo}
+          onKeyDown={alistamiento.handleKeyDown}
+          onAbrirCamara={() => setCamaraAlistamientoAbierta(true)}
+          alistando={alistamiento.alistando}
+          onEnviarAlMuelle={alistamiento.enviarAlMuelle}
+          productos={productos}
+        />
+      ) : (
+      <>
       {!facturaPendienteActiva ? (
         <EstadoSinPendientes
           puedeGestionarFacturas={puedeGestionarFacturas}
@@ -351,22 +398,33 @@ export function VerificacionMuelleView({
 
       <BitacoraIncidenciasMuelle incidencias={muelle.incidencias} />
 
-      {puedeGestionarFacturas && (
-        <ModalNuevaFacturaMuelle
-          abierta={modalAbierto}
-          productos={productos}
-          onCerrar={() => setModalAbierto(false)}
-          onCrearFactura={muelle.crearFacturaMuelle}
-        />
-      )}
-
       {puedeUsarCamaraRf && (
         <ModalEscanerCamara
           abierto={camaraAbierta}
           onCerrar={() => setCamaraAbierta(false)}
           onPistolearCodigo={(codigo) => {
-            void muelle.procesarPistoleo(codigo);
+          muelle.procesarPistoleo(codigo);
           }}
+        />
+      )}
+      </>
+      )}
+
+      <ModalEscanerCamara
+        abierto={
+          camaraAlistamientoAbierta &&
+          seccionActiva === SECCIONES_MUELLE.ALISTAMIENTO
+        }
+        onCerrar={() => setCamaraAlistamientoAbierta(false)}
+        onPistolearCodigo={alistamiento.procesarCodigo}
+      />
+
+      {puedeGestionarFacturas && modalAbierto && (
+        <ModalNuevaFacturaMuelle
+          abierta={modalAbierto}
+          productos={productos}
+          onCerrar={() => setModalAbierto(false)}
+          onCrearFactura={muelle.crearFacturaMuelle}
         />
       )}
     </>

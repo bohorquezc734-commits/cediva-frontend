@@ -21,8 +21,8 @@ export function LoginView({ onLoginExitoso }: LoginViewProps) {
         email: correo.trim(),
         password: clave,
       });
-      toast.success(`Bienvenido, ${data.usuario.nombreCompleto}`);
       onLoginExitoso(data);
+      toast.success(`Bienvenido, ${data.usuario.nombreCompleto}`);
     } catch (err) {
       toast.error(extraerMensajeError(err, 'No se pudo iniciar sesión. Verifica tus datos.'));
     } finally {

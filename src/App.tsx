@@ -1,8 +1,18 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import axios from 'axios';
 import './App.css';
 import toast, { Toaster } from 'react-hot-toast';
 import { api, extraerMensajeError } from './services/api';
+import { ROLES_USUARIO } from './constants/roles';
+import { ESTADOS_MUELLE, MENSAJES_MUELLE } from './constants/muelle';
+import { VISTAS_APP } from './constants/navegacion';
+import { INTERVALOS_OPERACION_MS } from './constants/operacion';
+import {
+  fusionarOrdenesMuelle,
+  mapearOrdenFacturaMuelle,
+  obtenerRegresionesEstadoMuelle,
+} from './services/muelleSync';
+import { etiquetaRolUsuario, normalizarRolUsuario } from './types/cediva';
 import { Sidebar } from './components/Sidebar';
 import { LoginView } from './views/LoginView';
 import { InventarioView } from './views/InventarioView';
@@ -18,82 +28,14 @@ import type {
   InventarioDto,
   LoginResponseDto,
   OrdenFacturaMuelle,
-  OrdenFacturaMuelleApiDto,
   Producto,
+  UsuarioInfoApiDto,
   UsuarioInfoDto,
   VistaActual,
 } from './types/cediva';
 
 const STORAGE_TOKEN_KEY = 'cediva_token';
 const STORAGE_USER_KEY = 'cediva_usuario';
-
-function mapearOrdenDtoAFrontend(dto: OrdenFacturaMuelleApiDto): OrdenFacturaMuelle {
-  const tieneTransporte =
-    Boolean(dto.transportadora) || Boolean(dto.placaVehiculo) || Boolean(dto.conductor);
-
-  return {
-    id: dto.id,
-    numeroFactura: dto.numeroFactura,
-    clienteNombre: dto.clienteNombre,
-    clienteNit: dto.clienteNit,
-    muelle: dto.muelle,
-    estado: dto.estado,
-    auditadoPor: dto.auditadoPor ?? undefined,
-    horaAuditoria: dto.horaAuditoria ?? undefined,
-    despachadoPor: dto.despachadoPor ?? undefined,
-    horaDespacho: dto.horaDespacho ?? undefined,
-    datosTransporte: tieneTransporte
-      ? {
-          transportadora: dto.transportadora ?? '',
-          placaVehiculo: dto.placaVehiculo ?? '',
-          conductorNombre: dto.conductor ?? '',
-        }
-      : undefined,
-    lineas: dto.lineas.map((l) => ({
-      codigoBarras: l.codigoBarras,
-      cantidadPedida: l.cantidadPedida,
-      cantidadPistoleada: l.cantidadPistoleada,
-    })),
-  };
-}
-
-function fusionarLineasPendientes(
-  lineasRemotas: OrdenFacturaMuelle['lineas'],
-  lineasLocales: OrdenFacturaMuelle['lineas']
-): OrdenFacturaMuelle['lineas'] {
-  return lineasRemotas.map((lineaRemota) => {
-    const lineaLocal = lineasLocales.find(
-      (l) => l.codigoBarras === lineaRemota.codigoBarras
-    );
-    if (!lineaLocal) return lineaRemota;
-
-    return {
-      ...lineaRemota,
-      cantidadPistoleada: Math.max(
-        lineaRemota.cantidadPistoleada,
-        lineaLocal.cantidadPistoleada
-      ),
-    };
-  });
-}
-
-function fusionarOrdenesMuelle(
-  ordenesRemotas: OrdenFacturaMuelle[],
-  ordenesPrevias: OrdenFacturaMuelle[]
-): OrdenFacturaMuelle[] {
-  return ordenesRemotas.map((remota) => {
-    if (remota.estado !== 'pendiente') return remota;
-    const local = ordenesPrevias.find(
-      (p) => p.id === remota.id && p.estado === 'pendiente'
-    );
-    if (!local) return remota;
-
-    return {
-      ...remota,
-      lineas: fusionarLineasPendientes(remota.lineas, local.lineas),
-    };
-  });
-}
 
 function construirRegistroHistorialMuelle(
   fac: OrdenFacturaMuelle,
@@ -112,16 +54,17 @@ function construirRegistroHistorialMuelle(
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
-  const infoAuditoria = `Auditó: ${fac.auditadoPor ?? 'Auditor'} (${fac.horaAuditoria ?? '--:--:--'})`;
+  const infoAuditoria = `Auditó: ${fac.auditadoPor ?? MENSAJES_MUELLE.AUDITOR_PREDETERMINADO} (${fac.horaAuditoria ?? MENSAJES_MUELLE.HORA_NO_DISPONIBLE})`;
   const infoDespacho =
-    fac.estado === 'despachada' && fac.datosTransporte
-      ? ` | Despachó: ${fac.despachadoPor ?? 'Auditor'} (${fac.horaDespacho ?? '--:--:--'}) · ${fac.datosTransporte.transportadora} (${fac.datosTransporte.placaVehiculo}) · Cond.: ${fac.datosTransporte.conductorNombre}`
+    fac.estado === ESTADOS_MUELLE.DESPACHADA && fac.datosTransporte
+      ? ` | Despachó: ${fac.despachadoPor ?? MENSAJES_MUELLE.AUDITOR_PREDETERMINADO} (${fac.horaDespacho ?? MENSAJES_MUELLE.HORA_NO_DISPONIBLE}) · ${fac.datosTransporte.transportadora} (${fac.datosTransporte.placaVehiculo}) · Cond.: ${fac.datosTransporte.conductorNombre}`
       : ' | [AUDITADA — PENDIENTE DESPACHO]';
+  const fechaRegistro = fac.fechaDespacho?.trim() || fac.fechaCreacion?.trim() || '';
 
   return {
     id: fac.id,
     cliente: `${fac.numeroFactura} — ${fac.clienteNombre} (${fac.muelle}) | ${infoAuditoria}${infoDespacho}`,
-    fecha: new Date().toISOString(),
+    fecha: fechaRegistro,
     items,
   };
 }
@@ -132,19 +75,26 @@ function leerUsuarioGuardado(): UsuarioInfoDto | null {
   if (!token || !rawUser) return null;
 
   try {
-    return JSON.parse(rawUser) as UsuarioInfoDto;
+    const usuarioGuardado = JSON.parse(rawUser) as UsuarioInfoApiDto;
+    return {
+      ...usuarioGuardado,
+      rol: normalizarRolUsuario(usuarioGuardado.rol),
+    };
   } catch {
     return null;
   }
 }
 
 function obtenerVistaInicial(usuario: UsuarioInfoDto | null): VistaActual {
-  return usuario?.rol === 'AuditorBodega' ? 'muelle' : 'inventario';
+  return usuario?.rol === ROLES_USUARIO.AUDITOR_BODEGA ||
+    usuario?.rol === ROLES_USUARIO.AUXILIAR_LOGISTICO
+    ? VISTAS_APP.MUELLE
+    : VISTAS_APP.INVENTARIO;
 }
 
 function obtenerNombreVisibleUsuario(usuario: UsuarioInfoDto | null): string {
   if (!usuario) return 'Usuario CEDIVA';
-  return usuario.nombreCompleto?.trim() || usuario.email || usuario.rol || 'Usuario CEDIVA';
+  return usuario.nombreCompleto?.trim() || usuario.email || etiquetaRolUsuario(usuario.rol);
 }
 
 function App() {
@@ -157,6 +107,22 @@ function App() {
   const [despachosHistorial, setDespachosHistorial] = useState<DespachoHistorialDto[]>([]);
   const [facturasMuelle, setFacturasMuelle] = useState<OrdenFacturaMuelle[]>([]);
   const [cargando, setCargando] = useState(false);
+  const facturasMuelleRef = useRef(facturasMuelle);
+  const avisosRegresionRef = useRef(new Set<string>());
+  const errorSincronizacionNotificadoRef = useRef(false);
+
+  useEffect(() => {
+    facturasMuelleRef.current = facturasMuelle;
+  }, [facturasMuelle]);
+
+  const notificarErrorSincronizacion = useCallback((err: unknown) => {
+    if (errorSincronizacionNotificadoRef.current) return;
+    errorSincronizacionNotificadoRef.current = true;
+    const mensaje = err instanceof Error
+      ? err.message
+      : 'No se pudieron sincronizar las órdenes de muelle.';
+    toast.error(extraerMensajeError(err, mensaje));
+  }, []);
 
   const cerrarSesion = useCallback(() => {
     localStorage.removeItem(STORAGE_TOKEN_KEY);
@@ -166,24 +132,54 @@ function App() {
     setClientes([]);
     setDespachosHistorial([]);
     setFacturasMuelle([]);
-    setVistaActual('inventario');
+    setVistaActual(VISTAS_APP.INVENTARIO);
     toast.success('Sesión cerrada');
   }, []);
 
   const sincronizarOrdenesMuelle = useCallback(async () => {
     if (!usuario) return;
-    const resMuelle = await api.get<OrdenFacturaMuelleApiDto[]>('/MuelleControlador');
-    const ordenesApi = resMuelle.data.map(mapearOrdenDtoAFrontend);
+    const resMuelle = await api.get<unknown>('/MuelleControlador');
+    if (!Array.isArray(resMuelle.data)) {
+      throw new Error('La respuesta de órdenes de muelle no es una lista.');
+    }
+    const ordenesApi = resMuelle.data.map(mapearOrdenFacturaMuelle);
+    const regresiones = obtenerRegresionesEstadoMuelle(ordenesApi, facturasMuelleRef.current);
+    const regresionesActuales = new Set(
+      regresiones.map((r) => `${r.id}:${r.estadoLocal}:${r.estadoRemoto}`)
+    );
+
+    for (const regresion of regresiones) {
+      const clave = `${regresion.id}:${regresion.estadoLocal}:${regresion.estadoRemoto}`;
+      if (avisosRegresionRef.current.has(clave)) continue;
+      avisosRegresionRef.current.add(clave);
+      toast.error(
+        `El servidor aún reporta ${regresion.estadoRemoto} para ${regresion.factura}; se conserva ${regresion.estadoLocal} localmente mientras sincroniza.`
+      );
+    }
+
+    for (const clave of avisosRegresionRef.current) {
+      if (!regresionesActuales.has(clave)) avisosRegresionRef.current.delete(clave);
+    }
+
     setFacturasMuelle((prev) => fusionarOrdenesMuelle(ordenesApi, prev));
+    errorSincronizacionNotificadoRef.current = false;
   }, [usuario]);
+
+  const sincronizarEnSegundoPlano = useCallback(() => {
+    void sincronizarOrdenesMuelle().catch((err: unknown) => {
+      notificarErrorSincronizacion(err);
+    });
+  }, [sincronizarOrdenesMuelle, notificarErrorSincronizacion]);
 
   const cargarDatos = useCallback(async () => {
     if (!usuario) return;
 
+    let falloSincronizacionMuelle = false;
     try {
       setCargando(true);
       const puedeVerComercial =
-        usuario.rol === 'Administrador' || usuario.rol === 'Supervisor';
+        usuario.rol === ROLES_USUARIO.ADMINISTRADOR ||
+        usuario.rol === ROLES_USUARIO.SUPERVISOR;
 
       const [resProductos, resInventarios] = await Promise.all([
         api.get<Omit<Producto, 'stock'>[]>('/ProductoControlador'),
@@ -196,7 +192,12 @@ function App() {
       });
 
       setProductos(productosConStock);
-      await sincronizarOrdenesMuelle();
+      try {
+        await sincronizarOrdenesMuelle();
+      } catch (err) {
+        falloSincronizacionMuelle = true;
+        throw err;
+      }
 
       if (puedeVerComercial) {
         const [resClientes, resDespachos] = await Promise.all([
@@ -215,11 +216,15 @@ function App() {
         toast.error('Tu sesión expiró. Inicia sesión nuevamente.');
         return;
       }
+      if (falloSincronizacionMuelle) {
+        notificarErrorSincronizacion(err);
+        return;
+      }
       toast.error(extraerMensajeError(err, 'Error al cargar los datos'));
     } finally {
       setCargando(false);
     }
-  }, [usuario, cerrarSesion, sincronizarOrdenesMuelle]);
+  }, [usuario, cerrarSesion, sincronizarOrdenesMuelle, notificarErrorSincronizacion]);
 
   useEffect(() => {
     if (usuario) {
@@ -232,31 +237,41 @@ function App() {
     if (!usuario) return;
 
     const intervalo = window.setInterval(() => {
-      void sincronizarOrdenesMuelle().catch(() => {});
-    }, 5000);
+      sincronizarEnSegundoPlano();
+    }, INTERVALOS_OPERACION_MS.SINCRONIZACION_MUELLE);
 
     return () => window.clearInterval(intervalo);
-  }, [usuario, sincronizarOrdenesMuelle]);
+  }, [usuario, sincronizarEnSegundoPlano]);
 
   useEffect(() => {
-    if (usuario && (vistaActual === 'muelle' || vistaActual === 'trazabilidad')) {
-      void sincronizarOrdenesMuelle().catch(() => {});
+    if (
+      usuario &&
+      (vistaActual === VISTAS_APP.MUELLE || vistaActual === VISTAS_APP.TRAZABILIDAD)
+    ) {
+      sincronizarEnSegundoPlano();
     }
-  }, [usuario, vistaActual, sincronizarOrdenesMuelle]);
+  }, [usuario, vistaActual, sincronizarEnSegundoPlano]);
 
   const historialCombinado = useMemo(() => {
     const registrosMuelle = facturasMuelle
-      .filter((fac) => fac.estado !== 'pendiente')
+      .filter((fac) =>
+        fac.estado === ESTADOS_MUELLE.AUDITADA_LISTA_DESPACHO ||
+        fac.estado === ESTADOS_MUELLE.DESPACHADA
+      )
       .map((fac) => construirRegistroHistorialMuelle(fac, productos));
 
     return [...registrosMuelle, ...despachosHistorial];
   }, [facturasMuelle, productos, despachosHistorial]);
 
   const handleLoginExitoso = (sesion: LoginResponseDto) => {
+    const usuarioSesion: UsuarioInfoDto = {
+      ...sesion.usuario,
+      rol: normalizarRolUsuario(sesion.usuario.rol),
+    };
     localStorage.setItem(STORAGE_TOKEN_KEY, sesion.token);
-    localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(sesion.usuario));
-    setUsuario(sesion.usuario);
-    setVistaActual(obtenerVistaInicial(sesion.usuario));
+    localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(usuarioSesion));
+    setUsuario(usuarioSesion);
+    setVistaActual(obtenerVistaInicial(usuarioSesion));
   };
 
   if (!usuario) {
@@ -269,6 +284,10 @@ function App() {
   }
 
   const nombreVisible = obtenerNombreVisibleUsuario(usuario);
+  const esAuxiliarLogistico = usuario.rol === ROLES_USUARIO.AUXILIAR_LOGISTICO;
+  const puedeVerGestionComercial =
+    usuario.rol === ROLES_USUARIO.ADMINISTRADOR ||
+    usuario.rol === ROLES_USUARIO.SUPERVISOR;
   return (
     <div className="app-container">
       <Toaster position="top-right" />
@@ -284,40 +303,47 @@ function App() {
       />
 
       <main className="main-content">
-        {vistaActual === 'muelle' && (
+        {vistaActual === VISTAS_APP.MUELLE && (
           <VerificacionMuelleView
             productos={productos}
             facturas={facturasMuelle}
             onCambiarFacturas={setFacturasMuelle}
-            auditorNombre={`${nombreVisible} · ${usuario.rol}`}
+            auditorNombre={`${nombreVisible} · ${etiquetaRolUsuario(usuario.rol)}`}
             usuarioRol={usuario.rol}
             onRecargarDatos={cargarDatos}
-            onIrATrazabilidad={() => setVistaActual('trazabilidad')}
+            onSincronizarOrdenesMuelle={sincronizarOrdenesMuelle}
+            onIrATrazabilidad={
+              esAuxiliarLogistico
+                ? undefined
+                : () => setVistaActual(VISTAS_APP.TRAZABILIDAD)
+            }
           />
         )}
-        {vistaActual === 'usuarios' && usuario.rol === 'Administrador' && (
+        {vistaActual === VISTAS_APP.USUARIOS &&
+          usuario.rol === ROLES_USUARIO.ADMINISTRADOR && (
           <UsuariosView usuarioActualEmail={usuario.email} />
         )}
 
-        {vistaActual === 'trazabilidad' && (
+        {vistaActual === VISTAS_APP.TRAZABILIDAD && !esAuxiliarLogistico && (
           <TrazabilidadMuelleView
             facturas={facturasMuelle}
             onCambiarFacturas={setFacturasMuelle}
-            usuarioNombre={`${nombreVisible} · ${usuario.rol}`}
-            onRecargarDatos={cargarDatos}
+            usuarioNombre={`${nombreVisible} · ${etiquetaRolUsuario(usuario.rol)}`}
+            onSincronizarOrdenesMuelle={sincronizarOrdenesMuelle}
           />
         )}
 
-        {vistaActual === 'inventario' && (
+        {vistaActual === VISTAS_APP.INVENTARIO && !esAuxiliarLogistico && (
           <InventarioView
             productos={productos}
             cargando={cargando}
-            puedeCrearProducto={usuario.rol === 'Administrador'}
+            puedeCrearProducto={usuario.rol === ROLES_USUARIO.ADMINISTRADOR}
+            usuarioRol={usuario.rol}
             onRecargarDatos={cargarDatos}
           />
         )}
 
-        {vistaActual === 'clientes' && (
+        {vistaActual === VISTAS_APP.CLIENTES && puedeVerGestionComercial && (
           <ClientesView
             clientes={clientes}
             cargando={cargando}
@@ -325,7 +351,7 @@ function App() {
           />
         )}
 
-        {vistaActual === 'despachos' && (
+        {vistaActual === VISTAS_APP.DESPACHOS && puedeVerGestionComercial && (
           <DespachosView
             productos={productos}
             clientes={clientes}
@@ -333,7 +359,7 @@ function App() {
           />
         )}
 
-        {vistaActual === 'historial' && (
+        {vistaActual === VISTAS_APP.HISTORIAL && puedeVerGestionComercial && (
           <HistorialView
             despachosHistorial={historialCombinado}
             productos={productos}

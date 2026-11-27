@@ -1,6 +1,16 @@
 import { useState, useMemo, useRef, useEffect, type KeyboardEvent } from 'react';
 import toast from 'react-hot-toast';
 import { api, extraerMensajeError } from '../services/api';
+import {
+  CANTIDADES_MUELLE,
+  ESTADOS_MUELLE,
+  MENSAJES_MUELLE,
+} from '../constants/muelle';
+import {
+  INTERVALOS_OPERACION_MS,
+  LIMITES_OPERACION,
+  TIPOS_MOVIMIENTO_INVENTARIO,
+} from '../constants/operacion';
 import type {
   DatosTransporteDespacho,
   OrdenFacturaMuelle,
@@ -40,17 +50,20 @@ export function useVerificacionMuelle({
   productos,
   facturas,
   onCambiarFacturas,
-  auditorNombre = 'Auditor Bodega',
+  auditorNombre = MENSAJES_MUELLE.AUDITOR_BODEGA_PREDETERMINADO,
   onRecargarDatos,
   onFacturaAuditada,
 }: UseVerificacionMuelleParams) {
   const facturasPendientes = useMemo(
-    () => facturas.filter((f) => f.estado === 'pendiente'),
+    () => facturas.filter((f) => f.estado === ESTADOS_MUELLE.ALISTADA),
     [facturas]
   );
 
   const facturasAuditadas = useMemo(
-    () => facturas.filter((f) => f.estado !== 'pendiente'),
+    () => facturas.filter((f) =>
+      f.estado === ESTADOS_MUELLE.AUDITADA_LISTA_DESPACHO ||
+      f.estado === ESTADOS_MUELLE.DESPACHADA
+    ),
     [facturas]
   );
 
@@ -63,6 +76,9 @@ export function useVerificacionMuelle({
   const [cerrandoPacking, setCerrandoPacking] = useState(false);
 
   const inputScannerRef = useRef<HTMLInputElement>(null);
+  const ultimoPistoleoRef = useRef<number>(
+    INTERVALOS_OPERACION_MS.TIEMPO_INICIAL_PISTOLEO
+  );
 
   useEffect(() => {
     const actualEsPendiente = facturasPendientes.some(
@@ -107,7 +123,10 @@ export function useVerificacionMuelle({
     return {
       totalPedido,
       totalPistoleado,
-      faltantes: Math.max(0, totalPedido - totalPistoleado),
+      faltantes: Math.max(
+        CANTIDADES_MUELLE.SIN_UNIDADES,
+        totalPedido - totalPistoleado
+      ),
       todasCompletas,
     };
   }, [facturaActiva]);
@@ -131,11 +150,15 @@ export function useVerificacionMuelle({
   };
 
   const procesarPistoleo = (codigoRaw: string) => {
+    const ahora = Date.now();
+    if (ahora - ultimoPistoleoRef.current < INTERVALOS_OPERACION_MS.ANTI_RAFAGA_PISTOLEO) return;
+    ultimoPistoleoRef.current = ahora;
+
     const codigo = codigoRaw.trim();
     setCodigoEscaneado('');
     if (!codigo || !facturaActiva) return;
 
-    if (facturaActiva.estado !== 'pendiente') {
+    if (facturaActiva.estado !== ESTADOS_MUELLE.ALISTADA) {
       toast.error('Esta factura ya fue auditada en muelle.');
       return;
     }
@@ -153,7 +176,9 @@ export function useVerificacionMuelle({
         : '(Código desconocido en catálogo)';
       const motivo = `PRODUCTO TROCADO ${nombreDetectado} — No pertenece a la factura ${facturaActiva.numeroFactura}.`;
       registrarIncidencia(codigo, motivo);
-      toast.error(`¡TROCADO DETECTADO! ${codigo} no está en esta factura.`, { duration: 4000 });
+      toast.error(`¡TROCADO DETECTADO! ${codigo} no está en esta factura.`, {
+        duration: INTERVALOS_OPERACION_MS.DURACION_ALERTA_TROCADO,
+      });
       inputScannerRef.current?.focus();
       return;
     }
@@ -217,10 +242,15 @@ export function useVerificacionMuelle({
         if (fac.id !== facturaActiva.id) return fac;
         return {
           ...fac,
-          estado: 'pendiente',
+          estado: ESTADOS_MUELLE.ALISTADA,
+          alistadoPor: fac.alistadoPor,
+          horaAlistamiento: fac.horaAlistamiento,
           auditadoPor: undefined,
           horaAuditoria: undefined,
-          lineas: fac.lineas.map((l) => ({ ...l, cantidadPistoleada: 0 })),
+          lineas: fac.lineas.map((l) => ({
+            ...l,
+            cantidadPistoleada: CANTIDADES_MUELLE.SIN_UNIDADES,
+          })),
         };
       })
     );
@@ -253,7 +283,10 @@ export function useVerificacionMuelle({
         muelle: muelleLimpio,
         lineas: datos.lineas.map((l) => ({
           codigoBarras: l.codigoBarras.trim(),
-          cantidadPedida: Math.max(1, Math.floor(l.cantidadPedida)),
+          cantidadPedida: Math.max(
+            LIMITES_OPERACION.CANTIDAD_MINIMA,
+            Math.floor(l.cantidadPedida)
+          ),
         })),
       };
 
@@ -273,7 +306,11 @@ export function useVerificacionMuelle({
   };
 
   const confirmarPackingYSalida = async () => {
-    if (!facturaActiva || !resumenFactura.todasCompletas || facturaActiva.estado !== 'pendiente') {
+    if (
+      !facturaActiva ||
+      !resumenFactura.todasCompletas ||
+      facturaActiva.estado !== ESTADOS_MUELLE.ALISTADA
+    ) {
       return;
     }
 
@@ -292,7 +329,7 @@ export function useVerificacionMuelle({
         return {
           productoId: prod.id,
           cantidadValor: linea.cantidadPedida,
-          tipo: 2,
+          tipo: TIPOS_MOVIMIENTO_INVENTARIO.SALIDA,
         };
       });
 
@@ -318,7 +355,7 @@ export function useVerificacionMuelle({
 
       const facturaMarcada: OrdenFacturaMuelle = {
         ...facturaActiva,
-        estado: 'auditada_lista_despacho',
+        estado: ESTADOS_MUELLE.AUDITADA_LISTA_DESPACHO,
         auditadoPor: auditorNombre,
         horaAuditoria,
       };
@@ -366,7 +403,7 @@ export function useVerificacionMuelle({
         if (fac.id !== facturaId) return fac;
         return {
           ...fac,
-          estado: 'despachada',
+          estado: ESTADOS_MUELLE.DESPACHADA,
           despachadoPor: auditorNombre,
           horaDespacho,
           datosTransporte: transporte,

@@ -2,6 +2,13 @@ import { useMemo, useState, type SyntheticEvent } from 'react';
 import { CheckCircle2, ClipboardCheck, Clock, Search, Truck, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api, extraerMensajeError } from '../services/api';
+import {
+  ESTADOS_MUELLE,
+  FILTROS_TRAZABILIDAD_MUELLE,
+  MENSAJES_MUELLE,
+  type FiltroTrazabilidadMuelle,
+} from '../constants/muelle';
+import { CONFIGURACION_PAGINACION } from '../constants/operacion';
 import { PaginacionTabla } from '../components/PaginacionTabla';
 import type { OrdenFacturaMuelle } from '../types/cediva';
 
@@ -11,25 +18,31 @@ interface TrazabilidadMuelleViewProps {
     updater: (prev: OrdenFacturaMuelle[]) => OrdenFacturaMuelle[]
   ) => void;
   readonly usuarioNombre: string;
-  readonly onRecargarDatos: () => Promise<void>;
+  readonly onSincronizarOrdenesMuelle: () => Promise<void>;
 }
 
-type FiltroEstado = 'todas' | 'pendiente_despacho' | 'despachada';
+type FiltroEstado = FiltroTrazabilidadMuelle;
 
 function esFacturaPendienteDespacho(fac: OrdenFacturaMuelle): boolean {
-  return fac.estado !== 'pendiente' && fac.estado !== 'despachada';
+  return fac.estado === ESTADOS_MUELLE.AUDITADA_LISTA_DESPACHO;
 }
 
 export function TrazabilidadMuelleView({
   facturas,
   onCambiarFacturas,
   usuarioNombre,
-  onRecargarDatos,
+  onSincronizarOrdenesMuelle,
 }: TrazabilidadMuelleViewProps) {
-  const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todas');
+  const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>(
+    FILTROS_TRAZABILIDAD_MUELLE.TODAS
+  );
   const [busqueda, setBusqueda] = useState('');
-  const [paginaActual, setPaginaActual] = useState(1);
-  const [tamanoPagina, setTamanoPagina] = useState(10);
+  const [paginaActual, setPaginaActual] = useState<number>(
+    CONFIGURACION_PAGINACION.PAGINA_INICIAL
+  );
+  const [tamanoPagina, setTamanoPagina] = useState<number>(
+    CONFIGURACION_PAGINACION.TAMANO_PAGINA
+  );
   const [facturaADespachar, setFacturaADespachar] = useState<OrdenFacturaMuelle | null>(null);
   const [despachando, setDespachando] = useState(false);
 
@@ -38,7 +51,15 @@ export function TrazabilidadMuelleView({
   const [conductorNombre, setConductorNombre] = useState('');
 
   const facturasAuditadas = useMemo(
-    () => facturas.filter((f) => f.estado !== 'pendiente'),
+    () => facturas.filter((f) =>
+      f.estado === ESTADOS_MUELLE.AUDITADA_LISTA_DESPACHO ||
+      f.estado === ESTADOS_MUELLE.DESPACHADA
+    ),
+    [facturas]
+  );
+
+  const facturasAlistadas = useMemo(
+    () => facturas.filter((factura) => factura.estado === ESTADOS_MUELLE.ALISTADA),
     [facturas]
   );
 
@@ -48,17 +69,24 @@ export function TrazabilidadMuelleView({
   );
 
   const totalDespachadas = useMemo(
-    () => facturasAuditadas.filter((f) => f.estado === 'despachada').length,
+    () => facturasAuditadas.filter(
+      (f) => f.estado === ESTADOS_MUELLE.DESPACHADA
+    ).length,
     [facturasAuditadas]
   );
 
   const facturasFiltradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    return facturasAuditadas.filter((fac) => {
+    const candidatas =
+      filtroEstado === FILTROS_TRAZABILIDAD_MUELLE.ALISTADA
+        ? facturasAlistadas
+        : facturasAuditadas;
+    return candidatas.filter((fac) => {
       const cumpleEstado =
-        filtroEstado === 'todas' ||
-        (filtroEstado === 'despachada'
-          ? fac.estado === 'despachada'
+        filtroEstado === FILTROS_TRAZABILIDAD_MUELLE.TODAS ||
+        filtroEstado === FILTROS_TRAZABILIDAD_MUELLE.ALISTADA ||
+        (filtroEstado === FILTROS_TRAZABILIDAD_MUELLE.DESPACHADA
+          ? fac.estado === ESTADOS_MUELLE.DESPACHADA
           : esFacturaPendienteDespacho(fac));
 
       const cumpleBusqueda =
@@ -71,9 +99,12 @@ export function TrazabilidadMuelleView({
 
       return cumpleEstado && cumpleBusqueda;
     });
-  }, [facturasAuditadas, filtroEstado, busqueda]);
+  }, [facturasAlistadas, facturasAuditadas, filtroEstado, busqueda]);
 
-  const totalPaginas = Math.max(1, Math.ceil(facturasFiltradas.length / tamanoPagina));
+  const totalPaginas = Math.max(
+    CONFIGURACION_PAGINACION.MINIMO_TOTAL_PAGINAS,
+    Math.ceil(facturasFiltradas.length / tamanoPagina)
+  );
   const paginaSegura = Math.min(paginaActual, totalPaginas);
 
   const facturasPaginadas = useMemo(() => {
@@ -83,17 +114,17 @@ export function TrazabilidadMuelleView({
 
   const handleCambioFiltroEstado = (nuevoFiltro: FiltroEstado) => {
     setFiltroEstado(nuevoFiltro);
-    setPaginaActual(1);
+    setPaginaActual(CONFIGURACION_PAGINACION.PAGINA_INICIAL);
   };
 
   const handleCambioBusqueda = (valor: string) => {
     setBusqueda(valor);
-    setPaginaActual(1);
+    setPaginaActual(CONFIGURACION_PAGINACION.PAGINA_INICIAL);
   };
 
   const handleCambioTamano = (nuevoTamano: number) => {
     setTamanoPagina(nuevoTamano);
-    setPaginaActual(1);
+    setPaginaActual(CONFIGURACION_PAGINACION.PAGINA_INICIAL);
   };
 
   const abrirModalDespacho = (factura: OrdenFacturaMuelle) => {
@@ -133,30 +164,38 @@ export function TrazabilidadMuelleView({
         placaVehiculo: placaLimpia,
         conductor: condLimpio,
       });
-
-      onCambiarFacturas((prev) =>
-        prev.map((f) =>
-          f.id === facturaADespachar.id
-            ? {
-                ...f,
-                estado: 'despachada',
-                despachadoPor: usuarioNombre,
-                horaDespacho,
-                datosTransporte: {
-                  transportadora: transpLimpia,
-                  placaVehiculo: placaLimpia,
-                  conductorNombre: condLimpio,
-                },
-              }
-            : f
-        )
-      );
-
-      await onRecargarDatos();
-      toast.success(`Factura ${facturaADespachar.numeroFactura} despachada correctamente.`);
-      setFacturaADespachar(null);
     } catch (err) {
       toast.error(extraerMensajeError(err, 'No se pudo registrar el despacho en el servidor.'));
+      setDespachando(false);
+      return;
+    }
+
+    onCambiarFacturas((prev) =>
+      prev.map((f) =>
+        f.id === facturaADespachar.id
+          ? {
+              ...f,
+              estado: ESTADOS_MUELLE.DESPACHADA,
+              despachadoPor: usuarioNombre,
+              horaDespacho,
+              datosTransporte: {
+                transportadora: transpLimpia,
+                placaVehiculo: placaLimpia,
+                conductorNombre: condLimpio,
+              },
+            }
+          : f
+      )
+    );
+    toast.success(`Factura ${facturaADespachar.numeroFactura} despachada correctamente.`);
+    setFacturaADespachar(null);
+
+    try {
+      await onSincronizarOrdenesMuelle();
+    } catch (err) {
+      toast.error(
+        `El despacho quedó registrado, pero no se pudo refrescar la sincronización: ${extraerMensajeError(err, MENSAJES_MUELLE.ERROR_DESCONOCIDO)}`
+      );
     } finally {
       setDespachando(false);
     }
@@ -247,12 +286,22 @@ export function TrazabilidadMuelleView({
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           {(
             [
-              { id: 'todas', label: `Todas (${facturasAuditadas.length})` },
               {
-                id: 'pendiente_despacho',
+                id: FILTROS_TRAZABILIDAD_MUELLE.TODAS,
+                label: `Todas (${facturasAuditadas.length})`,
+              },
+              {
+                id: FILTROS_TRAZABILIDAD_MUELLE.ALISTADA,
+                label: `En muelle sin auditar (${facturasAlistadas.length})`,
+              },
+              {
+                id: FILTROS_TRAZABILIDAD_MUELLE.PENDIENTE_DESPACHO,
                 label: `Pendientes Despacho (${totalPendientesDespacho})`,
               },
-              { id: 'despachada', label: `Despachadas (${totalDespachadas})` },
+              {
+                id: FILTROS_TRAZABILIDAD_MUELLE.DESPACHADA,
+                label: `Despachadas (${totalDespachadas})`,
+              },
             ] as const
           ).map((tab) => {
             const activo = filtroEstado === tab.id;
@@ -339,7 +388,7 @@ export function TrazabilidadMuelleView({
                   <th>FACTURA</th>
                   <th>CLIENTE / NIT</th>
                   <th>MUELLE</th>
-                  <th>AUDITADO POR</th>
+                  <th>AUDITORÍA / ALISTAMIENTO</th>
                   <th>DESPACHO Y TRANSPORTE</th>
                   <th>ESTADO</th>
                   <th>ACCIÓN</th>
@@ -351,7 +400,8 @@ export function TrazabilidadMuelleView({
                     (acc, l) => acc + l.cantidadPedida,
                     0
                   );
-                  const estaDespachada = fac.estado === 'despachada';
+                  const estaDespachada = fac.estado === ESTADOS_MUELLE.DESPACHADA;
+                  const estaAlistada = fac.estado === ESTADOS_MUELLE.ALISTADA;
 
                   return (
                     <tr key={fac.id}>
@@ -369,9 +419,23 @@ export function TrazabilidadMuelleView({
                       </td>
                       <td>{fac.muelle}</td>
                       <td>
-                        <strong>{fac.auditadoPor ?? 'Auditor'}</strong>
-                        <div style={{ fontSize: '12px', color: '#64748b' }}>
-                          {fac.horaAuditoria ?? '--:--:--'}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ fontSize: '12px', color: '#475569', fontWeight: 600 }}>
+                            Auditó: {fac.auditadoPor ?? MENSAJES_MUELLE.AUDITOR_PREDETERMINADO} (
+                            {fac.horaAuditoria ?? MENSAJES_MUELLE.HORA_NO_DISPONIBLE})
+                          </div>
+                          {fac.alistadoPor && (
+                            <div
+                              style={{
+                                fontSize: '12px',
+                                color: '#0284c7',
+                                fontWeight: 600,
+                              }}
+                            >
+                              Alistó: {fac.alistadoPor} (
+                              {fac.horaAlistamiento ?? MENSAJES_MUELLE.HORA_NO_DISPONIBLE})
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td>
@@ -395,6 +459,10 @@ export function TrazabilidadMuelleView({
                               {fac.horaDespacho ?? '--:--'})
                             </div>
                           </div>
+                        ) : estaAlistada ? (
+                          <span style={{ fontSize: '12px', color: '#64748b' }}>
+                            Pendiente de auditoría en muelle
+                          </span>
                         ) : (
                           <span
                             style={{
@@ -424,6 +492,22 @@ export function TrazabilidadMuelleView({
                           >
                             <CheckCircle2 size={13} /> DESPACHADA
                           </span>
+                        ) : estaAlistada ? (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '4px 10px',
+                              borderRadius: '999px',
+                              background: '#e0f2fe',
+                              color: '#0369a1',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                            }}
+                          >
+                            <Clock size={13} /> PENDIENTE DE AUDITORÍA
+                          </span>
                         ) : (
                           <span
                             style={{
@@ -452,6 +536,10 @@ export function TrazabilidadMuelleView({
                             }}
                           >
                             Completado
+                          </span>
+                        ) : estaAlistada ? (
+                          <span style={{ color: '#64748b', fontSize: '12px' }}>
+                            En espera de auditoría
                           </span>
                         ) : (
                           <button

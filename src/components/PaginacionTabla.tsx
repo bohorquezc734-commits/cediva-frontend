@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { CONFIGURACION_PAGINACION } from '../constants/operacion';
 
 interface PaginacionTablaProps {
   readonly paginaActual: number;
@@ -9,7 +10,12 @@ interface PaginacionTablaProps {
   readonly onCambiarTamano: (nuevoTamano: number) => void;
 }
 
-const OPCIONES_DEFECTO = [5, 10, 25, 50] as const;
+const OPCIONES_DEFECTO = [
+  5,
+  CONFIGURACION_PAGINACION.TAMANO_PAGINA,
+  25,
+  50,
+] as const;
 
 export function PaginacionTabla({
   paginaActual,
@@ -21,9 +27,17 @@ export function PaginacionTabla({
 }: PaginacionTablaProps) {
   if (totalItems === 0) return null;
 
-  const totalPaginas = Math.max(1, Math.ceil(totalItems / tamanoPagina));
-  const paginaSegura = Math.min(Math.max(1, paginaActual), totalPaginas);
-  const inicio = (paginaSegura - 1) * tamanoPagina + 1;
+  const totalPaginas = Math.max(
+    CONFIGURACION_PAGINACION.MINIMO_TOTAL_PAGINAS,
+    Math.ceil(totalItems / tamanoPagina)
+  );
+  const paginaSegura = Math.min(
+    Math.max(CONFIGURACION_PAGINACION.PAGINA_INICIAL, paginaActual),
+    totalPaginas
+  );
+  const inicio =
+    (paginaSegura - CONFIGURACION_PAGINACION.PAGINA_INICIAL) * tamanoPagina +
+    CONFIGURACION_PAGINACION.PAGINA_INICIAL;
   const fin = Math.min(paginaSegura * tamanoPagina, totalItems);
 
   return (

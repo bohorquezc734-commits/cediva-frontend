@@ -1,4 +1,5 @@
 import { FileText } from 'lucide-react';
+import { ESTADOS_MUELLE } from '../../constants/muelle';
 import type { OrdenFacturaMuelle } from '../../types/cediva';
 
 interface SelectorFacturaMuelleProps {
@@ -17,11 +18,11 @@ export function SelectorFacturaMuelle({
   let badgeColor = '#b45309';
   let badgeTexto = 'AUDITADA — PENDIENTE DESPACHO';
 
-  if (facturaActiva?.estado === 'pendiente') {
+  if (facturaActiva?.estado === ESTADOS_MUELLE.ALISTADA) {
     badgeBg = '#e0f2fe';
     badgeColor = '#0284c7';
     badgeTexto = 'EN VERIFICACIÓN RF';
-  } else if (facturaActiva?.estado === 'despachada') {
+  } else if (facturaActiva?.estado === ESTADOS_MUELLE.DESPACHADA) {
     badgeBg = '#dcfce7';
     badgeColor = '#15803d';
     badgeTexto = 'DESPACHADA';

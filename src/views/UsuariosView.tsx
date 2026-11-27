@@ -12,33 +12,56 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api, extraerMensajeError } from '../services/api';
+import {
+  ETIQUETAS_ROL_USUARIO,
+  type IdRolUsuario,
+  IDS_ROL_USUARIO,
+  ROLES_USUARIO,
+} from '../constants/roles';
+import { CONFIGURACION_PAGINACION } from '../constants/operacion';
 import { PaginacionTabla } from '../components/PaginacionTabla';
-import type { RolUsuario, UsuarioListadoDto } from '../types/cediva';
+import {
+  etiquetaRolUsuario,
+  normalizarRolUsuario,
+  type RolUsuario,
+  type UsuarioListadoApiDto,
+  type UsuarioListadoDto,
+} from '../types/cediva';
 
 interface UsuariosViewProps {
   readonly usuarioActualEmail?: string;
 }
 
-const OPCIONES_ROL: readonly { readonly valor: number; readonly etiqueta: string }[] = [
-  { valor: 3, etiqueta: 'Auditor de Bodega (Pistoleo RF y Despacho)' },
-  { valor: 2, etiqueta: 'Supervisor (Facturas, Trazabilidad y Clientes)' },
-  { valor: 1, etiqueta: 'Administrador (Control Total y Personal)' },
+const OPCIONES_ROL: readonly { readonly valor: IdRolUsuario; readonly etiqueta: string }[] = [
+  {
+    valor: IDS_ROL_USUARIO.AUXILIAR_LOGISTICO,
+    etiqueta: `${ETIQUETAS_ROL_USUARIO[ROLES_USUARIO.AUXILIAR_LOGISTICO]} (Alistamiento y Envío a Muelle)`,
+  },
+  {
+    valor: IDS_ROL_USUARIO.AUDITOR_BODEGA,
+    etiqueta: `${ETIQUETAS_ROL_USUARIO[ROLES_USUARIO.AUDITOR_BODEGA]} (Pistoleo RF y Despacho)`,
+  },
+  {
+    valor: IDS_ROL_USUARIO.SUPERVISOR,
+    etiqueta: `${ETIQUETAS_ROL_USUARIO[ROLES_USUARIO.SUPERVISOR]} (Facturas, Trazabilidad y Clientes)`,
+  },
+  {
+    valor: IDS_ROL_USUARIO.ADMINISTRADOR,
+    etiqueta: `${ETIQUETAS_ROL_USUARIO[ROLES_USUARIO.ADMINISTRADOR]} (Control Total y Personal)`,
+  },
 ];
 
-function normalizarRol(rol: RolUsuario | number | string): RolUsuario {
-  if (rol === 1 || rol === '1' || rol === 'Administrador') return 'Administrador';
-  if (rol === 2 || rol === '2' || rol === 'Supervisor') return 'Supervisor';
-  return 'AuditorBodega';
-}
-
 function obtenerEstiloRol(rol: RolUsuario): { bg: string; color: string; etiqueta: string } {
-  if (rol === 'Administrador') {
-    return { bg: '#ede9fe', color: '#6d28d9', etiqueta: 'Administrador' };
+  if (rol === ROLES_USUARIO.AUXILIAR_LOGISTICO) {
+    return { bg: '#ffedd5', color: '#c2410c', etiqueta: etiquetaRolUsuario(rol) };
   }
-  if (rol === 'Supervisor') {
-    return { bg: '#e0f2fe', color: '#0369a1', etiqueta: 'Supervisor' };
+  if (rol === ROLES_USUARIO.ADMINISTRADOR) {
+    return { bg: '#ede9fe', color: '#6d28d9', etiqueta: etiquetaRolUsuario(rol) };
   }
-  return { bg: '#dcfce7', color: '#15803d', etiqueta: 'Auditor Bodega' };
+  if (rol === ROLES_USUARIO.SUPERVISOR) {
+    return { bg: '#e0f2fe', color: '#0369a1', etiqueta: etiquetaRolUsuario(rol) };
+  }
+  return { bg: '#dcfce7', color: '#15803d', etiqueta: etiquetaRolUsuario(rol) };
 }
 
 interface ModalRegistrarUsuarioProps {
@@ -259,15 +282,22 @@ export function UsuariosView({ usuarioActualEmail }: UsuariosViewProps) {
   const [usuarios, setUsuarios] = useState<UsuarioListadoDto[]>([]);
   const [cargando, setCargando] = useState(false);
   const [busqueda, setBusqueda] = useState('');
-  const [paginaActual, setPaginaActual] = useState(1);
-  const [tamanoPagina, setTamanoPagina] = useState(10);
+  const [paginaActual, setPaginaActual] = useState<number>(
+    CONFIGURACION_PAGINACION.PAGINA_INICIAL
+  );
+  const [tamanoPagina, setTamanoPagina] = useState<number>(
+    CONFIGURACION_PAGINACION.TAMANO_PAGINA
+  );
   const [modalAbierto, setModalAbierto] = useState(false);
 
   const cargarUsuarios = useCallback(async () => {
     try {
       setCargando(true);
-      const { data } = await api.get<UsuarioListadoDto[]>('/AuthControlador/usuarios');
-      setUsuarios(data);
+      const { data } = await api.get<UsuarioListadoApiDto[]>('/AuthControlador/usuarios');
+      setUsuarios(data.map((usuario): UsuarioListadoDto => ({
+        ...usuario,
+        rol: normalizarRolUsuario(usuario.rol),
+      })));
     } catch (err) {
       toast.error(extraerMensajeError(err, 'No se pudo cargar el listado de usuarios.'));
     } finally {
@@ -283,15 +313,17 @@ export function UsuariosView({ usuarioActualEmail }: UsuariosViewProps) {
     let administradores = 0;
     let supervisores = 0;
     let auditores = 0;
+    let auxiliares = 0;
 
     for (const u of usuarios) {
-      const rol = normalizarRol(u.rol);
-      if (rol === 'Administrador') administradores += 1;
-      else if (rol === 'Supervisor') supervisores += 1;
+      const rol = u.rol;
+      if (rol === ROLES_USUARIO.ADMINISTRADOR) administradores += 1;
+      else if (rol === ROLES_USUARIO.SUPERVISOR) supervisores += 1;
+      else if (rol === ROLES_USUARIO.AUXILIAR_LOGISTICO) auxiliares += 1;
       else auditores += 1;
     }
 
-    return { total: usuarios.length, administradores, supervisores, auditores };
+    return { total: usuarios.length, administradores, supervisores, auditores, auxiliares };
   }, [usuarios]);
 
   const usuariosFiltrados = useMemo(() => {
@@ -299,7 +331,7 @@ export function UsuariosView({ usuarioActualEmail }: UsuariosViewProps) {
     if (!q) return usuarios;
 
     return usuarios.filter((u) => {
-      const rol = normalizarRol(u.rol).toLowerCase();
+      const rol = `${u.rol} ${etiquetaRolUsuario(u.rol)}`.toLowerCase();
       return (
         u.nombreCompleto.toLowerCase().includes(q) ||
         u.email.toLowerCase().includes(q) ||
@@ -308,7 +340,10 @@ export function UsuariosView({ usuarioActualEmail }: UsuariosViewProps) {
     });
   }, [usuarios, busqueda]);
 
-  const totalPaginas = Math.max(1, Math.ceil(usuariosFiltrados.length / tamanoPagina));
+  const totalPaginas = Math.max(
+    CONFIGURACION_PAGINACION.MINIMO_TOTAL_PAGINAS,
+    Math.ceil(usuariosFiltrados.length / tamanoPagina)
+  );
   const paginaSegura = Math.min(paginaActual, totalPaginas);
 
   const usuariosPaginados = useMemo(() => {
@@ -318,12 +353,12 @@ export function UsuariosView({ usuarioActualEmail }: UsuariosViewProps) {
 
   const handleCambioBusqueda = (valor: string) => {
     setBusqueda(valor);
-    setPaginaActual(1);
+    setPaginaActual(CONFIGURACION_PAGINACION.PAGINA_INICIAL);
   };
 
   const handleCambioTamano = (nuevoTamano: number) => {
     setTamanoPagina(nuevoTamano);
-    setPaginaActual(1);
+    setPaginaActual(CONFIGURACION_PAGINACION.PAGINA_INICIAL);
   };
 
   return (
@@ -334,7 +369,7 @@ export function UsuariosView({ usuarioActualEmail }: UsuariosViewProps) {
             Gestión de Personal y Roles
           </h1>
           <p style={{ margin: '5px 0 0', color: '#64748b', fontSize: '14px' }}>
-            Crea y administra cuentas individuales para auditores RF, supervisores y administradores
+            Crea y administra cuentas para auxiliares logísticos, auditores, supervisores y administradores
           </p>
         </div>
 
@@ -357,6 +392,12 @@ export function UsuariosView({ usuarioActualEmail }: UsuariosViewProps) {
           <div className="kpi-title">Auditores Bodega</div>
           <div className="kpi-value" style={{ color: '#16a34a' }}>
             {resumen.auditores}
+          </div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-title">Auxiliares Logísticos</div>
+          <div className="kpi-value" style={{ color: '#c2410c' }}>
+            {resumen.auxiliares}
           </div>
         </div>
         <div className="kpi-card">
@@ -406,8 +447,7 @@ export function UsuariosView({ usuarioActualEmail }: UsuariosViewProps) {
             )}
 
             {usuariosPaginados.map((u) => {
-              const rolNorm = normalizarRol(u.rol);
-              const badge = obtenerEstiloRol(rolNorm);
+              const badge = obtenerEstiloRol(u.rol);
               const esSesionActual =
                 Boolean(usuarioActualEmail) &&
                 u.email.toLowerCase() === usuarioActualEmail?.toLowerCase();

@@ -2,6 +2,7 @@ import { useState, useMemo, type SubmitEvent } from 'react';
 import { Plus, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api, extraerMensajeError } from '../services/api';
+import { CONFIGURACION_PAGINACION } from '../constants/operacion';
 import { PaginacionTabla } from '../components/PaginacionTabla';
 import type { ClienteDto, CrearClientePayload } from '../types/cediva';
 
@@ -13,8 +14,12 @@ interface ClientesViewProps {
 
 export function ClientesView({ clientes, cargando, onRecargarDatos }: ClientesViewProps) {
   const [busqueda, setBusqueda] = useState('');
-  const [paginaActual, setPaginaActual] = useState(1);
-  const [tamanoPagina, setTamanoPagina] = useState(10);
+  const [paginaActual, setPaginaActual] = useState<number>(
+    CONFIGURACION_PAGINACION.PAGINA_INICIAL
+  );
+  const [tamanoPagina, setTamanoPagina] = useState<number>(
+    CONFIGURACION_PAGINACION.TAMANO_PAGINA
+  );
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [nombre, setNombre] = useState('');
   const [nit, setNit] = useState('');
@@ -30,7 +35,10 @@ export function ClientesView({ clientes, cargando, onRecargarDatos }: ClientesVi
     );
   }, [clientes, busqueda]);
 
-  const totalPaginas = Math.max(1, Math.ceil(clientesFiltrados.length / tamanoPagina));
+  const totalPaginas = Math.max(
+    CONFIGURACION_PAGINACION.MINIMO_TOTAL_PAGINAS,
+    Math.ceil(clientesFiltrados.length / tamanoPagina)
+  );
   const paginaSegura = Math.min(paginaActual, totalPaginas);
 
   const clientesPaginados = useMemo(() => {
@@ -40,12 +48,12 @@ export function ClientesView({ clientes, cargando, onRecargarDatos }: ClientesVi
 
   const handleCambioBusqueda = (valor: string) => {
     setBusqueda(valor);
-    setPaginaActual(1);
+    setPaginaActual(CONFIGURACION_PAGINACION.PAGINA_INICIAL);
   };
 
   const handleCambioTamano = (nuevoTamano: number) => {
     setTamanoPagina(nuevoTamano);
-    setPaginaActual(1);
+    setPaginaActual(CONFIGURACION_PAGINACION.PAGINA_INICIAL);
   };
 
   const guardarCliente = (e: SubmitEvent<HTMLFormElement>) => {
